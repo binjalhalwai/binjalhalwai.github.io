@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+httpx
+feedparser
+beautifulsoup4
+apscheduler>=3.10,<4
+openpyxl
+python-dateutil

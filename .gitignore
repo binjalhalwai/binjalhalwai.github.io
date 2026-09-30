@@ -1,0 +1,5 @@
+__pycache__/
+public_site/
+data/nnh.log
+data/*.csv
+.netlify/
