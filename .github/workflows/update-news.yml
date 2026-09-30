@@ -9,6 +9,10 @@ on:
     # Night: once an hour, about 20:00 - 07:30 Nepal time
     - cron: "17 14-23,0-1 * * *"
   workflow_dispatch:          # lets you press "Run workflow" yourself
+  push:                       # re-publish right after you upload a new screener file
+    paths:
+      - screener_public.json
+      - nepse_news_hub.py
 
 permissions:
   contents: read
