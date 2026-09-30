@@ -1,0 +1,86 @@
+# NewsPortal - runs on GitHub's servers (free), publishes to GitHub Pages.
+# All cron times are UTC.  Nepal = UTC + 5:45.
+name: Update NewsPortal
+
+on:
+  schedule:
+    # Daytime: every 10 minutes, about 07:45 - 19:40 Nepal time
+    - cron: "3-59/10 2-13 * * *"
+    # Night: once an hour, about 20:00 - 07:30 Nepal time
+    - cron: "17 14-23,0-1 * * *"
+  workflow_dispatch:          # lets you press "Run workflow" yourself
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  actions: write              # only used to keep the schedule from being auto-disabled
+
+concurrency:
+  group: newsportal
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install libraries
+        run: pip install -r requirements.txt
+
+      # Only the news database is remembered between runs (settings/sources come from the repo)
+      - name: Restore news database
+        uses: actions/cache/restore@v4
+        with:
+          path: data/nepse_news.db*
+          key: newsdb-${{ github.run_id }}
+          restore-keys: newsdb-
+
+      - name: Collect latest news
+        run: python nepse_news_hub.py collect
+        continue-on-error: true      # one bad source must not stop the update
+
+      - name: Save news database
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: data/nepse_news.db*
+          key: newsdb-${{ github.run_id }}
+
+      - name: Build public site (headlines + links only)
+        run: python nepse_news_hub.py publish
+        env:
+          NNH_CONTACT: ${{ secrets.NNH_CONTACT }}
+
+      - name: Check the page is not empty
+        run: test "$(wc -c < public_site/index.html)" -gt 20000
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public_site
+
+      # Best effort: resets GitHub's 60-day inactivity timer for scheduled workflows
+      - name: Keep schedule alive
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/update-news.yml/enable" || true
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
