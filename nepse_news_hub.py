@@ -100,7 +100,7 @@ _load_dotenv(Path(__file__).resolve().parent / ".env")
 # Configuration
 # --------------------------------------------------------------------------------------
 APP_NAME = "Binjal Halwai NewsPortal"
-VERSION = "1.2.4"
+VERSION = "1.2.5"
 HOST = os.getenv("NNH_HOST", "127.0.0.1")
 PORT = int(os.getenv("NNH_PORT", "8000"))
 ADMIN_TOKEN = os.getenv("NNH_ADMIN_TOKEN", "")
@@ -3628,7 +3628,7 @@ DASHBOARD_HTML = (DASHBOARD_HTML.replace("</style></head>", _EXT_CSS + "</style>
 #      Nepse Alpha), so that their stories still join the repeated-story and priority logic.
 # Nothing here bypasses any site's terms: sources with permitted=false are still never fetched automatically.
 # ======================================================================================
-VERSION = "1.2.4"  # Phase-1: SEO/a11y, mobile screener, Nepali NFC, source registry
+VERSION = "1.2.5"  # Phase-1: SEO/a11y, mobile screener, Nepali NFC, source registry
 PRIORITY_RANK = {   # your order: 1 = searched first
     "sharesansar": 1, "merolagani": 2, "nepalipaisa": 3, "nepsealpha": 4, "arthasansar": 5, "bizpati": 6,
     "bajarkochirfar": 7, "eng_bajarkochirfar": 7, "aarthiknews": 8, "abhiyandaily": 10,
@@ -3691,6 +3691,41 @@ def _store_migrate_v12(self):
 
 
 Store.migrate = _store_migrate_v12
+
+
+# ---- v1.2.5: ShareSansar automatic headline collection ---------------------------------------
+# Checked 4 Oct 2026: https://www.sharesansar.com/robots.txt has "User-agent: *" with an empty Disallow (nothing
+# blocked) and the Terms & Conditions page has no clause against automated access. The collector reads ONLY the
+# headline, link and date from the public "latest news" list (never the article text), runs at most every few
+# minutes, honours robots.txt through the hub's HTTP client, and every headline links back to ShareSansar.
+# The other three portals stay manual (MeroLagani/Nepali Paisa terms forbid scripts; NepseAlpha blocks bots).
+_orig_store_migrate_v124 = Store.migrate
+
+
+def _store_migrate_v125(self):
+    _orig_store_migrate_v124(self)
+    marker = self.dir / ".v125_sharesansar_auto"
+    if marker.exists():          # applied once per data folder, so a later manual change in the UI is kept
+        return
+    with self.lock:
+        lst = self._read(self.p_sources)
+        changed = False
+        for src in lst:
+            if src.get("id") == "sharesansar":
+                src["method"], src["permitted"], src["enabled"] = "listing", True, True
+                src["listing"] = {"url": "https://www.sharesansar.com/category/latest",
+                                  "link_selector": 'a[href*="/newsdetail/"]'}
+                src["min_interval_min"] = 5
+                src["notes"] = ("[4-Oct-2026] robots.txt allows all (empty Disallow); Terms have no automation clause. "
+                                "Headline, link and date only - article text is never copied; every item links to "
+                                "ShareSansar.")
+                changed = True
+        if changed:
+            self._write(self.p_sources, lst)
+    marker.write_text("applied 2026-10-04\n", encoding="utf-8")
+
+
+Store.migrate = _store_migrate_v125
 
 _orig_sources = Store.sources
 
