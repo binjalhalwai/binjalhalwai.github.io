@@ -12,8 +12,13 @@
 # so you can delete old days whenever you like.
 # If a link is given it must be on that portal's own website.
 #
-# EXAMPLE (remove the # at the start of the three lines to use them):
+# EXAMPLE (the lines below start with "# " so they are only notes):
 # ## 2026-10-04
 # sharesansar | Your copied ShareSansar headline goes here | https://www.sharesansar.com/newsdetail/...
 # merolagani | Your copied MeroLagani headline goes here
 
+## 2026-10-04
+merolagani | सरकारले निम्न र मध्यम आय भएका नागरिकलाई सरल किस्ताबन्दीमा घर उपलब्ध गराउने | https://merolagani.com/NewsDetail.aspx?newsID=131483
+
+## 2026-10-02
+sharesansar | Know How Did The Mutual Funds Perform in Bhadra, A Complete Analysis of Multiple Factors | https://www.sharesansar.com/newsdetail/know-how-did-the-mutual-funds-perform-in-bhadra-a-complete-analysis-of-multiple-factors-2026-10-02
