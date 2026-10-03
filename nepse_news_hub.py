@@ -328,6 +328,15 @@ DEFAULT_SOURCES = [
        "RSS/Atom feed availability unverified — run 'verify-sources --only suryapatro' to check. "
        "If no feed is found, set method=manual.",
        evidence=EV_UNV),
+    # F. Phase-2 additions
+    _s("sharehubnepal", "ShareHub Nepal", "https://www.sharehubnepal.com/",
+       "https://www.sharehubnepal.com/news",
+       "market_portal", "en", "rss",
+       ["https://www.sharehubnepal.com/feed"],
+       notes="Phase-2 addition. Nepal stock market news portal covering NEPSE daily updates, IPO, "
+       "dividend, company results, mutual funds, rights shares, AGM notices and SEBON regulatory updates. "
+       "RSS feed confirmed at /feed (Feedspot listed). Run 'verify-sources --only sharehubnepal' to verify live.",
+       evidence="RSS feed listed on Feedspot and confirmed at /feed (Oct 2026)"),
 ]
 
 # --------------------------------------------------------------------------------------
