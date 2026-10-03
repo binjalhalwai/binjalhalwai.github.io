@@ -100,7 +100,7 @@ _load_dotenv(Path(__file__).resolve().parent / ".env")
 # Configuration
 # --------------------------------------------------------------------------------------
 APP_NAME = "Binjal Halwai NewsPortal"
-VERSION = "1.2.7"
+VERSION = "1.2.8"
 HOST = os.getenv("NNH_HOST", "127.0.0.1")
 PORT = int(os.getenv("NNH_PORT", "8000"))
 ADMIN_TOKEN = os.getenv("NNH_ADMIN_TOKEN", "")
@@ -1728,6 +1728,10 @@ SCREENER_BLOCK = r'''<style>
 .vtabs button.on{color:var(--onac);background:var(--ac);border-color:transparent;font-weight:700}
 .vtabs button:not(.on):hover{border-color:var(--ac);color:var(--ac)}
 .vtabs em{background:var(--ch);color:var(--ac);border:1px solid var(--ln);border-radius:6px;padding:1px 5px;margin-left:6px;font-size:9px;font-style:normal}
+.vtabs[hidden]{display:none}
+.vtabs.sub{padding:6px 14px;gap:6px;align-items:center;background:var(--p2);border-bottom:1px solid var(--ln)}
+.vtabs.sub button{border-radius:16px;min-height:30px;padding:4px 12px;font-size:11.5px}
+.vtabs.sub button.on{background:var(--ac);color:var(--onac)}
 #scr{padding:12px 16px;max-width:1400px;margin:0 auto;min-width:0}
 #scr [hidden]{display:none!important}
 #scr .sdt{color:var(--mu);margin-bottom:8px;font-size:11px}
@@ -1925,22 +1929,28 @@ const find=q=>{q=String(q||'').trim().toUpperCase();return R.find(r=>String(r[CO
 
 /* ---------- tabs ---------- */
 const nav=document.createElement('nav');nav.className='vtabs';nav.setAttribute('aria-label','Sections');
-nav.innerHTML='<button class="on" data-v="n">NEWS PORTAL<em>LATEST</em></button>'+
- [['v-mkt','MARKET'],['v-s','SCREENER'],['v-map','HEATMAP'],['v-sig','SIGNALS'],['v-val','VALUATION'],['v-qua','QUALITY'],['v-div','DIVIDENDS'],['v-cmp','COMPARE'],['v-360','STOCK 360'],['v-bnk','BANKING'],['v-wch','WATCHLIST']]
+nav.innerHTML='<button class="on" data-v="n">NEWS PORTAL<em>LATEST</em></button><button data-v="scr">STOCK SCREENER</button>';
+const sub=document.createElement('nav');sub.className='vtabs sub';sub.setAttribute('aria-label','Stock screener tools');sub.hidden=true;
+sub.innerHTML=[['v-mkt','MARKET'],['v-s','SCREENER'],['v-map','HEATMAP'],['v-sig','SIGNALS'],['v-val','VALUATION'],['v-qua','QUALITY'],['v-div','DIVIDENDS'],['v-cmp','COMPARE'],['v-360','STOCK 360'],['v-bnk','BANKING'],['v-wch','WATCHLIST']]
  .map(a=>`<button data-v="${a[0]}">${a[1]}</button>`).join('');
 const top=document.querySelector('.top');
-if(top)top.after(nav);else document.body.prepend(nav);
-let curV='n';
+if(top){top.after(nav);nav.after(sub)}else{document.body.prepend(sub);document.body.prepend(nav)}
+let curV='n',lastSub='v-mkt';
 function go(v){
-  const b=nav.querySelector(`[data-v="${v}"]`);if(!b)return;
-  nav.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
-  ['.stats','.lay'].forEach(q=>{const el=document.querySelector(q);if(el)el.style.display=(v==='n')?'':'none'});
-  const sec=document.getElementById('scr');if(sec)sec.hidden=(v==='n');
+  if(v==='scr')v=lastSub;                       // STOCK SCREENER tab -> reopen the last tool used
+  if(v!=='n'&&!sub.querySelector(`[data-v="${v}"]`))return;
+  const news=(v==='n');
+  if(!news)lastSub=v;
+  nav.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x.dataset.v===(news?'n':'scr')));
+  sub.hidden=news;
+  sub.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x.dataset.v===v));
+  ['.stats','.lay'].forEach(q=>{const el=document.querySelector(q);if(el)el.style.display=news?'':'none'});
+  const sec=document.getElementById('scr');if(sec)sec.hidden=news;
   curV=v;
-  if(v!=='n'){document.querySelectorAll('#scr .subv').forEach(el=>{el.hidden=(el.id!==v)});renderView()}
+  if(!news){document.querySelectorAll('#scr .subv').forEach(el=>{el.hidden=(el.id!==v)});renderView()}
   window.scrollTo(0,0);
 }
-nav.onclick=e=>{const b=e.target.closest('button');if(b)go(b.dataset.v)};
+nav.onclick=sub.onclick=e=>{const b=e.target.closest('button');if(b)go(b.dataset.v)};
 
 /* ---------- MARKET ---------- */
 function r_mkt(){
@@ -3638,7 +3648,7 @@ DASHBOARD_HTML = (DASHBOARD_HTML.replace("</style></head>", _EXT_CSS + "</style>
 #      Nepse Alpha), so that their stories still join the repeated-story and priority logic.
 # Nothing here bypasses any site's terms: sources with permitted=false are still never fetched automatically.
 # ======================================================================================
-VERSION = "1.2.7"  # Phase-1: SEO/a11y, mobile screener, Nepali NFC, source registry
+VERSION = "1.2.8"  # Phase-1: SEO/a11y, mobile screener, Nepali NFC, source registry
 PRIORITY_RANK = {   # your order: 1 = searched first
     "sharesansar": 1, "merolagani": 2, "nepalipaisa": 3, "nepsealpha": 4, "arthasansar": 5, "bizpati": 6,
     "bajarkochirfar": 7, "eng_bajarkochirfar": 7, "aarthiknews": 8, "abhiyandaily": 10,
