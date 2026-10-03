@@ -4,15 +4,16 @@ name: Update NewsPortal
 
 on:
   schedule:
-    # Daytime: every 10 minutes, about 07:45 - 19:40 Nepal time
-    - cron: "3-59/10 2-13 * * *"
-    # Night: once an hour, about 20:00 - 07:30 Nepal time
-    - cron: "17 14-23,0-1 * * *"
+    # GitHub delays or skips scheduled runs that start at busy minutes (:00, :10, :30 ...),
+    # so the minute below is deliberately off-peak.
+    # Every 10 minutes, all day and night (at :06, :16, :26 ... UTC)
+    - cron: "6-59/10 * * * *"
   workflow_dispatch:          # lets you press "Run workflow" yourself
   push:                       # re-publish right after you upload a new screener file
     paths:
       - screener_public.json
       - nepse_news_hub.py
+      - manual_headlines.txt
 
 permissions:
   contents: read
@@ -27,7 +28,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -49,7 +50,13 @@ jobs:
 
       - name: Collect latest news
         run: python nepse_news_hub.py collect
+        timeout-minutes: 10          # a hanging site must not hold up the next scheduled run
         continue-on-error: true      # one bad source must not stop the update
+
+      # Headlines you typed into manual_headlines.txt (portals that do not allow automated access)
+      - name: Add manual headlines
+        run: python nepse_news_hub.py manual-import
+        continue-on-error: true
 
       - name: Save news database
         if: always()
