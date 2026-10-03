@@ -1719,82 +1719,362 @@ def build_digest(period: str) -> str:
 
 
 SCREENER_BLOCK = r'''<style>
-.vtabs{display:flex;gap:10px;align-items:flex-end;padding:12px 20px 0;background:var(--bg);flex-wrap:wrap}
-.vtabs button{border:1px solid var(--ln);background:var(--p);color:var(--mu);border-radius:10px 10px 0 0;padding:9px 18px;font-weight:700;letter-spacing:.05em;cursor:pointer;min-height:44px}
-.vtabs button:first-child{font-size:15px;padding:11px 24px}
-.vtabs button.on{color:var(--onac);background:linear-gradient(135deg,var(--gA),var(--gB));border-color:transparent;box-shadow:0 4px 16px color-mix(in srgb,var(--gB) 40%,transparent)}
+.vtabs{display:flex;gap:6px;align-items:flex-end;padding:8px 14px 0;background:var(--bg);overflow-x:auto;-webkit-overflow-scrolling:touch;white-space:nowrap;border-bottom:1px solid var(--ln);scrollbar-width:none}
+.vtabs::-webkit-scrollbar{display:none}
+.vtabs button{border:1px solid var(--ln);background:var(--p);color:var(--mu);border-radius:8px 8px 0 0;padding:8px 14px;font-weight:600;font-size:12px;cursor:pointer;min-height:38px;transition:all 0.15s ease}
+.vtabs button.on{color:var(--onac);background:var(--ac);border-color:transparent;font-weight:700}
 .vtabs button:not(.on):hover{border-color:var(--ac);color:var(--ac)}
-.vtabs em{font-style:normal;background:var(--ch);color:var(--ac);border:1px solid var(--ln);border-radius:8px;padding:1px 7px;margin-left:8px;font-size:10px;animation:vbl 1.8s infinite}
-@keyframes vbl{50%{opacity:.5}}
-#scr{padding:14px 20px}#scr .sst{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
-#scr .sst div{background:var(--p);border:1px solid var(--ln);border-top:3px solid var(--ac2);border-radius:8px;padding:8px 12px}#scr .sst .u{border-top-color:var(--ok)}#scr .sst .d{border-top-color:var(--bad)}
-#scr .sst b{font-size:22px}#scr .sst small{display:block;color:var(--mu);font-size:10px;text-transform:uppercase;letter-spacing:.07em}
-#scr .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px}#scr .fr{display:inline-flex;gap:4px}#scr .fr input{width:70px;min-width:60px}
-#scr button,#scr select,#scr input{background:var(--p);color:var(--tx);border:1px solid var(--ln);border-radius:6px;padding:5px 9px;font:inherit;min-height:36px}
-#scr button{cursor:pointer}#scr button:hover{border-color:var(--ac)}#scr input[type=checkbox]{padding:0;min-height:auto;width:18px;height:18px}
-#scr .bar button{border-radius:14px}#scr details{position:relative}
-#scr #scp{position:absolute;z-index:5;background:var(--p);border:1px solid var(--ln);border-radius:8px;padding:8px;max-height:300px;overflow:auto;width:260px;max-width:90vw}
-#scr #scp label{display:block;padding:2px 0;cursor:pointer}
-#scr .tw{overflow-x:auto;overflow-y:auto;max-height:68vh;border:1px solid var(--ln);border-radius:10px;background:var(--p);-webkit-overflow-scrolling:touch}
-#scr table{border-collapse:collapse;width:100%;min-width:600px}
-#scr th{position:sticky;top:0;background:var(--p);cursor:pointer;text-align:right;white-space:nowrap;padding:7px 10px;border-bottom:2px solid var(--ac);font-size:11px;text-transform:uppercase}
-#scr td{padding:5px 10px;text-align:right;border-bottom:1px solid var(--ln);white-space:nowrap}
-#scr td.co,#scr th:first-child{text-align:left;font-weight:700;position:sticky;left:0;background:var(--p);z-index:2}
-#scr tr:hover td{background:var(--ch)}#scr th{color:var(--ac)}#scr .bar button:hover{background:var(--ch)}
-#scr tbody tr:nth-child(even){background:var(--p2)}#scr tbody tr:nth-child(even) td.co{background:var(--p2)}
-#scr tbody tr:hover td.co{background:var(--ch)}#scr .u{color:var(--ok)}#scr .d{color:var(--bad)}
-#scr .ft{padding:14px 0;color:var(--mu);font-size:11.5px;text-align:center;line-height:1.6}
+.vtabs em{background:var(--ch);color:var(--ac);border:1px solid var(--ln);border-radius:6px;padding:1px 5px;margin-left:6px;font-size:9px;font-style:normal}
+#scr{padding:12px 16px;max-width:1400px;margin:0 auto}
+.sst{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px}
+.sst div{background:var(--p);border:1px solid var(--ln);border-top:3px solid var(--ac2);border-radius:8px;padding:8px 12px}
+.sst .u{border-top-color:var(--ok)} .sst .d{border-top-color:var(--bad)}
+.sst b{font-size:20px;font-family:Consolas,monospace;display:block} .sst small{color:var(--mu);font-size:10px;text-transform:uppercase}
+.subv{margin-top:10px;animation:fadein 0.2s}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.bar input,.bar select,.bar button{background:var(--p);color:var(--tx);border:1px solid var(--ln);border-radius:6px;padding:6px 10px;min-height:34px;font:inherit}
+.bar button{cursor:pointer;border-radius:12px}
+.bar button:hover{background:var(--ch);border-color:var(--ac)}
+.tw{overflow-x:auto;overflow-y:auto;max-height:68vh;border:1px solid var(--ln);border-radius:8px;background:var(--p)}
+.tw table{border-collapse:collapse;width:100%;font-size:12px;min-width:600px}
+.tw th{position:sticky;top:0;background:var(--p);cursor:pointer;text-align:right;padding:7px 10px;border-bottom:2px solid var(--ac);font-size:11px;color:var(--ac);z-index:1}
+.tw td{padding:6px 10px;text-align:right;border-bottom:1px solid var(--ln);white-space:nowrap}
+.tw td.co,.tw th:first-child{text-align:left;font-weight:700;position:sticky;left:0;background:var(--p);z-index:2}
+.tw tbody tr:nth-child(even){background:var(--p2)}
+.tw tbody tr:nth-child(even) td.co{background:var(--p2)}
+.tw tbody tr:hover td{background:var(--ch)}
+.u{color:var(--ok)} .d{color:var(--bad)} .nd{color:var(--mu)}
+.card{background:var(--p);border:1px solid var(--ln);border-radius:8px;padding:12px;margin-bottom:12px}
+.card h3{margin:0 0 8px;font-size:13px;color:var(--ac);text-transform:uppercase}
+.c-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.ch-box{background:var(--p2);border:1px solid var(--ln);border-radius:6px;padding:10px}
+.ch-box h4{margin:0 0 6px;font-size:11px;color:var(--mu)}
+svg.chart{width:100%;height:180px;overflow:visible;font-size:10px;font-family:inherit}
+.chart text{fill:var(--tx)} .chart line{stroke:var(--ln)}
+.hmap{display:flex;flex-wrap:wrap;gap:2px}
+.tile{border-radius:4px;padding:4px 6px;color:#fff;cursor:default;display:flex;flex-direction:column;justify-content:space-between;box-sizing:border-box;transition:transform 0.1s;min-width:40px;min-height:30px}
+.tile:hover{transform:scale(1.05);z-index:5;outline:2px solid var(--tx)}
+.tile b{font-size:11px} .tile span{font-size:10px;opacity:0.9}
+.p-bar{height:6px;background:var(--ch);border-radius:3px;position:relative;margin:6px 0;width:100%}
+.p-dot{position:absolute;width:10px;height:10px;border-radius:50%;background:var(--ac);top:-2px;transform:translateX(-50%)}
+.s360-g{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+.s360-m{background:var(--p2);border:1px solid var(--ln);border-radius:6px;padding:8px}
+.s360-m small{display:block;color:var(--mu);font-size:10px}
+.s360-m span{font-size:15px;font-weight:700}
+.cmp-t th{font-size:11px;color:var(--mu);font-weight:normal}
+.cmp-t b{font-size:14px;color:var(--tx)}
+.scp{position:absolute;z-index:5;background:var(--p);border:1px solid var(--ln);border-radius:8px;padding:8px;max-height:300px;overflow:auto;width:260px}
+.scp label{display:block;padding:2px 0;cursor:pointer}
+.ft{padding:14px 0;color:var(--mu);font-size:11.5px;text-align:center;line-height:1.6}
 @media(max-width:700px){
-  #scr .sst{grid-template-columns:repeat(2,1fr)}
-  #scr{padding:10px 12px}
-  #scr .bar{gap:6px}
-  #scr .fr input{width:60px;min-width:50px}
-  #scr button,#scr select,#scr input[type=text],#scr input[type=number]{font-size:14px;padding:6px 8px}
-  .vtabs{padding:8px 12px 0;gap:6px}
-  .vtabs button{padding:8px 14px;font-size:13px}
-  .vtabs button:first-child{font-size:14px;padding:9px 16px}
-}
-@media(max-width:480px){
-  #scr .sst{grid-template-columns:repeat(2,1fr);gap:6px}
-  #scr .sst b{font-size:18px}
-  #scr #scp{width:220px}
+  #scr{padding:8px 10px} .tw td,.tw th{padding:5px 8px}
+  .c-grid{grid-template-columns:1fr}
 }
 </style>
-<section id="scr" hidden aria-label="Stock screener"><div class="mu" id="sdt" style="color:var(--mu);margin-bottom:8px"></div><div class="sst" id="sst" role="region" aria-label="Market summary"></div><div class="bar" id="spre" role="group" aria-label="Quick views"></div>
-<div class="bar" role="search"><label for="sq" class="sr-only">Search company or symbol</label><input id="sq" placeholder="Search company / symbol" aria-label="Search company or symbol"><button id="sadd" aria-label="Add numeric filter">+ Add filter</button><span id="sfl"></span><button id="sclr" aria-label="Clear all screener filters">Clear</button><details><summary aria-label="Show or hide column picker">Columns</summary><div id="scp" role="group" aria-label="Toggle columns"></div></details><button id="scsv" aria-label="Export current view as CSV">Export CSV</button></div>
-<div class="tw" role="region" aria-label="Stock data table"><table aria-label="NEPSE stock screener data"><thead id="sth"></thead><tbody id="stb"></tbody></table></div>
-<div class="ft">Data: Smart Wealth Pro stock-screener export, <span id="sdt2"></span>. For information and education only - not investment advice and not a recommendation to buy or sell. Verify with official NEPSE / company disclosures.</div></section>
-<script>(function(){const D=__SDATA__,C=D.cols,ix=n=>C.indexOf(n),$=s=>document.querySelector('#scr '+s),num=v=>typeof v==='number';
-const nav=document.createElement('nav');nav.className='vtabs';nav.innerHTML='<button class="on" data-v="n">NEWS PORTAL<em>LATEST</em></button><button data-v="s">STOCK SCREENER</button>';
+<section id="scr" hidden aria-label="Market Analytics">
+  <div class="mu" style="color:var(--mu);margin-bottom:8px;font-size:11px" id="sdt"></div>
+  <div id="v-s" class="subv">
+     <div class="sst" id="sst"></div>
+     <div class="bar" id="spre"></div>
+     <div class="bar">
+        <input id="sq" placeholder="Search company / symbol">
+        <button id="sadd">+ Add filter</button><span id="sfl"></span>
+        <button id="sclr">Clear</button>
+        <details style="position:relative"><summary>Columns</summary><div id="scp" class="scp"></div></details>
+        <button id="scsv">Export CSV</button>
+     </div>
+     <div class="tw"><table><thead id="sth"></thead><tbody id="stb"></tbody></table></div>
+  </div>
+  <div id="v-mkt" class="subv" hidden>
+     <div class="sst" id="m-sst"></div>
+     <div class="c-grid" id="m-chs"></div>
+  </div>
+  <div id="v-map" class="subv" hidden>
+     <div class="bar"><label>Color by:</label><select id="map-met"><option>% Change</option><option>1M</option><option>3M</option><option>1Y</option><option>RSI</option></select><small>(Size by Market Cap)</small></div>
+     <div class="hmap" id="m-map"></div>
+  </div>
+  <div id="v-sig" class="subv" hidden>
+     <div class="bar"><select id="sig-sel">
+          <option value="mom">Strong Momentum (1M>10%, 3M>10%)</option>
+          <option value="os">Oversold (RSI < 30)</option>
+          <option value="ob">Overbought (RSI > 70)</option>
+          <option value="nh">Near 52-Week High (<5% below)</option>
+          <option value="nl">Near 52-Week Low (<5% above)</option>
+          <option value="ut">Uptrend (Close > SMA20 > SMA50)</option>
+          <option value="mb">MACD Bullish (MACD > 0)</option>
+     </select></div>
+     <div class="tw"><table><thead id="sig-th"></thead><tbody id="sig-tb"></tbody></table></div>
+  </div>
+  <div id="v-val" class="subv" hidden>
+     <div class="bar"><label>X:</label><select id="val-x"><option>P/E (Annu.)</option><option>P/B</option><option>P/S</option></select><label>Y:</label><select id="val-y"><option>ROE (Annu.)</option><option>ROA (Annu.)</option><option>1Y</option><option>Dividend Yield</option></select></div>
+     <div class="card"><svg class="chart" id="val-svg" style="height:350px"></svg></div>
+  </div>
+  <div id="v-qua" class="subv" hidden>
+     <div class="bar"><label>X:</label><select id="qua-x"><option>ROE (Annu.)</option><option>ROA (Annu.)</option></select><label>Y:</label><select id="qua-y"><option>NPM</option><option>EPS (Annu.)</option></select></div>
+     <div class="card"><svg class="chart" id="qua-svg" style="height:350px"></svg></div>
+  </div>
+  <div id="v-cmp" class="subv" hidden>
+     <div class="bar"><input id="cmp-sq" placeholder="Type symbol to add..."><div id="cmp-ls" style="display:flex;gap:4px"></div><button id="cmp-clr">Clear</button></div>
+     <div class="tw" style="max-height:none"><table class="cmp-t"><tbody id="cmp-tb"></tbody></table></div>
+  </div>
+  <div id="v-360" class="subv" hidden>
+     <div class="bar"><input id="s360-sq" placeholder="Search company..."><button id="s360-rnd">Random</button></div>
+     <div id="s360-out"></div>
+  </div>
+  <div id="v-div" class="subv" hidden>
+     <div class="bar"><input id="div-sq" placeholder="Search..."><select id="div-f"><option value="all">All</option><option value="yes">Pays Dividend</option><option value="high">Yield > 5%</option></select></div>
+     <div class="tw"><table><thead id="div-th"></thead><tbody id="div-tb"></tbody></table></div>
+  </div>
+  <div class="ft">Data: Smart Wealth Pro dataset <span id="sdt2"></span>. Dashboard by Binjal Halwai. For info/education only.</div>
+
+  <div id="v-bnk" class="subv" hidden>
+     <div class="c-grid" id="bnk-chs"></div>
+     <div class="tw" style="margin-top:10px"><table><thead id="bnk-th"></thead><tbody id="bnk-tb"></tbody></table></div>
+  </div>
+  <div id="v-wch" class="subv" hidden>
+     <div class="bar">
+       <input id="wch-sq" placeholder="Type symbol to add...">
+       <button id="wch-clr">Clear All</button>
+     </div>
+     <div class="tw"><table><thead id="wch-th"></thead><tbody id="wch-tb"></tbody></table></div>
+  </div>
+
+</section>
+<script>
+(function(){
+const D=__SDATA__,C=D.cols,R=D.rows,ix=n=>C.indexOf(n),$=s=>document.querySelector('#scr '+s),$$=s=>document.querySelectorAll('#scr '+s),num=v=>typeof v==='number';
+const nrm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,''); 
+const cxCache={}; const cx=n=>{if(cxCache[n]!==undefined)return cxCache[n]; const tn=nrm(n); const i=C.findIndex(c=>nrm(c)===tn); cxCache[n]=i; return i;};
+const vl=(r,n)=>r[cx(n)];
+
+const nav=document.createElement('nav');nav.className='vtabs';
+nav.innerHTML=`<button class="on" data-v="n">NEWS PORTAL<em>LATEST</em></button><button data-v="v-mkt">MARKET</button><button data-v="v-s">SCREENER</button><button data-v="v-map">HEATMAP</button><button data-v="v-sig">SIGNALS</button><button data-v="v-val">VALUATION</button><button data-v="v-qua">QUALITY</button><button data-v="v-div">DIVIDENDS</button><button data-v="v-cmp">COMPARE</button><button data-v="v-360">STOCK 360</button><button data-v="v-bnk">BANKING</button><button data-v="v-wch">WATCHLIST</button>`;
 document.querySelector('.top').after(nav);
-nav.onclick=e=>{const b=e.target.closest('button');if(!b)return;const n=b.dataset.v=='n';nav.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x==b));
- ['.stats','.lay'].forEach(q=>{const el=document.querySelector(q);if(el)el.style.display=n?'':'none'});document.getElementById('scr').hidden=n;window.scrollTo(0,0)};
-const SHOW=['Company','LTP','% Change','1M','3M','6M','1Y','% Below 52 Wk H','RSI','MACD','P/E (Annu.)','P/B','EPS (Annu.)','ROE (Annu.)','Dividend Yield','Market Cap','BETA'].filter(n=>ix(n)>=0);
-const PCT=['% Change','Change','1M','3M','6M','1Y','YTD'],NUMC=C.filter((c,j)=>D.rows.some(r=>num(r[j])));let cols=[...SHOW],sc='% Change',asc=false,fl=[];
-const fmt=v=>v==null?'–':num(v)?v.toLocaleString('en-IN',{maximumFractionDigits:2}):v;
-function rows(){const q=$('#sq').value.trim().toLowerCase(),ci=ix('Company');
- const r=D.rows.filter(x=>(!q||String(x[ci]).toLowerCase().includes(q))&&fl.every(f=>{const v=x[ix(f.c)];return num(v)&&(f.a===''||v>=+f.a)&&(f.b===''||v<=+f.b)}));
- const si=ix(sc);r.sort((a,b)=>{const x=a[si],y=b[si];if(x==null)return 1;if(y==null)return -1;return(x>y?1:x<y?-1:0)*(asc?1:-1)});return r}
-let CUR=[];function draw(){const r=rows(),pc=ix('% Change'),up=r.filter(x=>x[pc]>0).length,dn=r.filter(x=>x[pc]<0).length;CUR=r;
- $('#sst').innerHTML=`<div><b>${r.length}</b><small>Companies shown</small></div><div class=u><b>${up}</b><small>Advancing</small></div><div class=d><b>${dn}</b><small>Declining</small></div><div><b>${r.length-up-dn}</b><small>Unchanged</small></div>`;
- $('#sth').innerHTML='<tr>'+cols.map(c=>`<th data-c="${c}">${c}${c==sc?(asc?' ▲':' ▼'):''}</th>`).join('')+'</tr>';
- $('#stb').innerHTML=r.map(x=>'<tr>'+cols.map(c=>{const v=x[ix(c)];return`<td class="${c=='Company'?'co':''} ${PCT.includes(c)&&num(v)?(v>0?'u':v<0?'d':''):''}">${fmt(v)}</td>`}).join('')+'</tr>').join('')}
-function rf(){$('#sfl').innerHTML=fl.map((f,i)=>`<span class=fr><select data-i=${i} data-k=c>${NUMC.map(n=>`<option ${n==f.c?'selected':''}>${n}</option>`).join('')}</select><input data-i=${i} data-k=a placeholder=min value="${f.a}"><input data-i=${i} data-k=b placeholder=max value="${f.b}"><button data-x=${i}>×</button></span>`).join('');draw()}
-const PRE={'Value: P/E<15 & P/B<2':[['P/E (Annu.)',0.01,15],['P/B',0.01,2]],'Dividend yield ≥ 5%':[['Dividend Yield',5,'']],'RSI < 30 (oversold)':[['RSI','',30]],'RSI > 70 (overbought)':[['RSI',70,'']],'Within 10% of 52-wk low':[['% Above 52 Wk L','',10]],'3-month gain > 10%':[['3M',10,'']]};
-$('#spre').innerHTML='<b>Quick views:</b> '+Object.keys(PRE).map(k=>`<button data-p="${k}">${k}</button>`).join('');
-$('#scp').innerHTML=C.map(c=>`<label><input type=checkbox data-col="${c}" ${cols.includes(c)?'checked':''}> ${c}</label>`).join('');
-$('#sdt').textContent='Screener data date: '+(D.date||'n/a')+' · '+D.rows.length+' companies · '+C.length+' data points';$('#sdt2').textContent=D.date||'';
-const R=document.getElementById('scr'),dsc=document.getElementById('disc');if(dsc)dsc.before(R);
-R.addEventListener('click',e=>{const t=e.target;
- if(t.dataset.c){asc=sc==t.dataset.c?!asc:false;sc=t.dataset.c;draw()}
- else if(t.dataset.p){fl=PRE[t.dataset.p].filter(f=>ix(f[0])>=0).map(f=>({c:f[0],a:f[1],b:f[2]}));rf()}
- else if(t.dataset.x!=null){fl.splice(+t.dataset.x,1);rf()}
- else if(t.id=='sadd'){fl.push({c:NUMC.includes('P/E (Annu.)')?'P/E (Annu.)':NUMC[0],a:'',b:''});rf()}
- else if(t.id=='sclr'){fl=[];$('#sq').value='';rf()}
- else if(t.id=='scsv'){const q=s=>'"'+String(s??'').replace(/"/g,'""')+'"',s=[cols.map(q).join(',')].concat(CUR.map(r=>cols.map(c=>q(r[ix(c)])).join(','))).join('\n'),a=document.createElement('a');a.href=URL.createObjectURL(new Blob([s],{type:'text/csv'}));a.download='screener_view.csv';a.click()}});
-R.addEventListener('input',e=>{const t=e.target;if(t.dataset.k){fl[+t.dataset.i][t.dataset.k]=t.value;draw()}else if(t.id=='sq')draw()});
-R.addEventListener('change',e=>{if(e.target.dataset.col){cols=C.filter(c=>R.querySelector(`[data-col="${c}"]`).checked);draw()}});
-draw()})();</script>'''
+
+let curV='n';
+nav.onclick=e=>{
+  const b=e.target.closest('button');if(!b)return;
+  const v=b.dataset.v;
+  nav.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x==b));
+  ['.stats','.lay'].forEach(q=>{const el=document.querySelector(q);if(el)el.style.display=(v=='n')?'':'none'});
+  const sec=document.getElementById('scr'); if(sec) sec.hidden=(v=='n');
+  if(v!=='n'){
+    $$('.subv').forEach(el=>{el.hidden=(el.id!==v)});
+    curV=v;
+    renderView();
+  }
+  window.scrollTo(0,0);
+};
+
+const fmt=v=>v==null?'–':num(v)?String(v.toLocaleString('en-IN',{maximumFractionDigits:2})).replace(/NaN/g,'-'):v;
+const cls=v=>num(v)?(v>0?'u':v<0?'d':''):'';
+
+const S_SHOW=['Company','LTP','% Change','1M','3M','6M','1Y','% Below 52 Wk H','RSI','MACD','P/E (Annu.)','P/B','EPS (Annu.)','ROE (Annu.)','Dividend Yield','Market Cap'];
+const NUMC=C.filter((c,j)=>R.some(r=>num(r[j])));
+let sCols=S_SHOW.filter(n=>cx(n)>=0).map(n=>C[cx(n)]),sSc='% Change',sAsc=false,sFl=[],CUR=[];
+
+function scatter(elId, rws, flx, fly) {
+  const el = $(elId); if(!el) return;
+  const xIx=cx(flx), yIx=cx(fly), mIx=cx('Market Cap'), cIx=cx('Company');
+  if(xIx<0||yIx<0) {el.innerHTML='Data Field Missing'; return;}
+  const pts = rws.filter(r=>num(r[xIx])&&num(r[yIx])).map(r=>({x:r[xIx],y:r[yIx],m:r[mIx]||0,c:r[cIx]}));
+  if(!pts.length){ el.innerHTML=''; return; }
+  let minX=Math.min(...pts.map(p=>p.x)), maxX=Math.max(...pts.map(p=>p.x));
+  let minY=Math.min(...pts.map(p=>p.y)), maxY=Math.max(...pts.map(p=>p.y));
+  if(minX==maxX){minX-=1.0;maxX+=1.0;} if(minY==maxY){minY-=1.0;maxY+=1.0;}
+  const pd=40, w=el.clientWidth||600, h=el.clientHeight||350;
+  const sx = (w-pd*2)/(maxX-minX), sy = (h-pd*2)/(maxY-minY);
+  const px = x => pd + (x-minX)*sx, py = y => h - pd - (y-minY)*sy;
+  
+  let htm = `<text x="${w/2}" y="${h-5}" text-anchor="middle" font-weight="bold">${flx}</text>`+
+            `<text x="12" y="${h/2}" transform="rotate(-90 12 ${h/2})" text-anchor="middle" font-weight="bold">${fly}</text>`+
+            `<line x1="${pd}" y1="${py(0)}" x2="${w-pd}" y2="${py(0)}" stroke-dasharray="4"/>`+ 
+            `<line x1="${px(0)}" y1="${pd}" x2="${px(0)}" y2="${h-pd}" stroke-dasharray="4"/>`;
+  pts.forEach(p=>{
+    const rad = Math.max(3, Math.min(25, p.m/1000000.0));
+    htm += `<circle cx="${px(p.x)}" cy="${py(p.y)}" r="${rad}" fill="var(--ac)" opacity="0.6">`+
+           `<title>${p.c}
+${flx}: ${fmt(p.x)}
+${fly}: ${fmt(p.y)}
+M.Cap: ${fmt(p.m)}</title></circle>`;
+  });
+  el.innerHTML=htm;
+}
+
+function r_scr(){
+  const q=$('#sq').value.trim().toLowerCase(), ci=cx('Company');
+  const r=R.filter(x=>(!q||String(x[ci]||'').toLowerCase().includes(q))&&sFl.every(f=>{const v=x[cx(f.c)];return num(v)&&(f.a===''||v>=+f.a)&&(f.b===''||v<=+f.b)}));
+  const si=cx(sSc); r.sort((a,b)=>{const x=a[si],y=b[si];if(x==null)return 1;if(y==null)return -1;return(x>y?1:x<y?-1:0)*(sAsc?1:-1)});
+  CUR=r; const pc=cx('% Change'); const up=r.filter(x=>x[pc]>0).length,dn=r.filter(x=>x[pc]<0).length;
+  $('#sst').innerHTML=`<div><b>${r.length}</b><small>Shown</small></div><div class=u><b>${up}</b><small>Advancing</small></div><div class=d><b>${dn}</b><small>Declining</small></div><div><b>${r.length-up-dn}</b><small>Unchanged</small></div>`;
+  $('#sth').innerHTML='<tr>'+sCols.map(c=>`<th data-c="${c}">${c}${c==sSc?(sAsc?' ▲':' ▼'):''}</th>`).join('')+'</tr>';
+  $('#stb').innerHTML=r.map(x=>'<tr>'+sCols.map(c=>{const v=x[cx(c)];return`<td class="${c=='Company'?'co':''} ${NUMC.includes(c)?cls(v):''}">${fmt(v)}</td>`}).join('')+'</tr>').join('');
+}
+function srf(){$('#sfl').innerHTML=sFl.map((f,i)=>`<span class=fr><select data-i=${i} data-k=c>${NUMC.map(n=>`<option ${n==f.c?'selected':''}>${n}</option>`).join('')}</select><input data-i=${i} data-k=a placeholder=min value="${f.a}"><input data-i=${i} data-k=b placeholder=max value="${f.b}"><button data-x=${i}>×</button></span>`).join('');r_scr();}
+
+function r_mkt(){
+  const up=R.filter(r=>vl(r,'% Change')>0).length, dn=R.filter(r=>vl(r,'% Change')<0).length, un=R.length-up-dn;
+  const hWk=R.filter(r=>num(vl(r,'% Below 52 Wk H')) && vl(r,'% Below 52 Wk H')<=5).length, lWk=R.filter(r=>num(vl(r,'% Above 52 Wk L')) && vl(r,'% Above 52 Wk L')<=5).length;
+  $('#m-sst').innerHTML=`<div><b>${R.length}</b><small>Total Stocks</small></div><div class=u><b>${up}</b><small>Advancing</small></div><div class=d><b>${dn}</b><small>Declining</small></div><div><b>${un}</b><small>Unchanged</small></div><div class=u><b>${hWk}</b><small>Near 52W High</small></div><div class=d><b>${lWk}</b><small>Near 52W Low</small></div>`;
+  const hist = (fName, bins) => {
+    let ht=''; bins.forEach(b=>{
+      const c = R.filter(r=>{const v=vl(r,fName); return num(v)&&v>=b.m&&v<b.M}).length;
+      ht+=`<tr><td>${b.l}</td><td>${c}</td><td style="width:100%"><div class="p-bar"><div class="p-bar" style="background:var(--${b.c||'mu'});width:${Math.min(100,c/Math.max(1,R.length)*300)}%;float:left;margin:0"></div></div></td></tr>`;
+    }); return `<div class="ch-box"><h4>${fName} Distribution</h4><table width="100%">`+ht+`</table></div>`;
+  };
+  let htm = hist('% Change', [{l:'<-4%',m:-99,M:-4,c:'bad'},{l:'-4 to -1%',m:-4,M:-1,c:'bad'},{l:'-1 to 1%',m:-1,M:1.0001,c:'mu'},{l:'1 to 4%',m:1.0001,M:4,c:'ok'},{l:'>4%',m:4,M:99,c:'ok'}]);
+  htm += hist('1M', [{l:'<-10%',m:-999,M:-10,c:'bad'},{l:'-10 to 0%',m:-10,M:0,c:'bad'},{l:'0 to 10%',m:0,M:10,c:'ok'},{l:'>10%',m:10,M:999,c:'ok'}]);
+  htm += hist('RSI', [{l:'<30 Oversold',m:0,M:30,c:'ok'},{l:'30-50',m:30,M:50},{l:'50-70',m:50,M:70},{l:'>70 Overbought',m:70,M:100,c:'bad'}]);
+  $('#m-chs').innerHTML=htm;
+}
+function r_map(){
+  const met=$('#map-met').value; const r=R.filter(x=>num(vl(x,met))&&num(vl(x,'Market Cap')));
+  r.sort((a,b)=>vl(b,'Market Cap')-vl(a,'Market Cap'));
+  const mca=Math.max(...r.map(x=>vl(x,'Market Cap')))/140.0;
+  $('#m-map').innerHTML = r.map(x=>{
+    const v=vl(x,met), mc=vl(x,'Market Cap');
+    const bg = v>4?'#16a34a':v>1?'#4ade80':v<-4?'#e11d48':v<-1?'#fb7185':'#8b9470';
+    return `<div class="tile" style="background:${bg};width:${Math.max(40,mc/mca)}px" title="${vl(x,'Company')}
+${met}: ${fmt(v)}
+M.Cap: ${fmt(mc)}"><b>${String(vl(x,'Company')).substring(0,8)}</b><span>${fmt(v)}${met.includes('%')?'%':''}</span></div>`;
+  }).join('');
+}
+
+function r_sig(){
+  let r=[]; const sel=$('#sig-sel').value;
+  if(sel=='mom') r=R.filter(x=>vl(x,'1M')>10&&vl(x,'3M')>10);
+  else if(sel=='os') r=R.filter(x=>vl(x,'RSI')<30);
+  else if(sel=='ob') r=R.filter(x=>vl(x,'RSI')>70);
+  else if(sel=='nh') r=R.filter(x=>num(vl(x,'% Below 52 Wk H'))&&vl(x,'% Below 52 Wk H')<=5);
+  else if(sel=='nl') r=R.filter(x=>num(vl(x,'% Above 52 Wk L'))&&vl(x,'% Above 52 Wk L')<=5);
+  else if(sel=='ut') r=R.filter(x=>num(vl(x,'LTP'))&&num(vl(x,'SMA20'))&&num(vl(x,'SMA50'))&&vl(x,'LTP')>vl(x,'SMA20')&&vl(x,'SMA20')>vl(x,'SMA50'));
+  else if(sel=='mb') r=R.filter(x=>vl(x,'MACD')>0);
+  
+  const h=['Company','LTP','% Change','1M','3M','1Y','RSI','MACD'].filter(c=>cx(c)>=0).map(c=>C[cx(c)]);
+  $('#sig-th').innerHTML='<tr>'+h.map(c=>`<th>${c}</th>`).join('')+'</tr>';
+  $('#sig-tb').innerHTML=r.map(x=>'<tr>'+h.map(c=>`<td class="${c=='Company'?'co':''} ${cls(vl(x,c))}">${fmt(vl(x,c))}</td>`).join('')+'</tr>').join('');
+}
+
+function r_val(){ setTimeout(()=>scatter('#val-svg', R, $('#val-x').value, $('#val-y').value),10); }
+function r_qua(){ setTimeout(()=>scatter('#qua-svg', R, $('#qua-x').value, $('#qua-y').value),10); }
+
+let cL=[];
+function r_cmp(){
+  let r=R.filter(x=>cL.includes(vl(x,'Company')));
+  $('#cmp-ls').innerHTML=cL.map(c=>`<span style="background:var(--ch);padding:4px 8px;border-radius:10px">${c} <button data-cx="${c}" style="border:0;background:none;cursor:pointer">×</button></span>`).join('');
+  const m = ['LTP','% Change','Market Cap','P/E  (Annu.)','P/B','EPS  (Annu.)','ROE  (Annu.)','ROA  (Annu.)','Dividend  Yield','1M','3M','1Y','RSI','MACD','% Below  52 Wk H'].filter(c=>cx(c)>=0).map(c=>C[cx(c)]);
+  let ht=''; m.forEach(c=>{
+    ht+=`<tr><th>${c}</th>`+r.map(x=>`<td class="${cls(vl(x,c))}">${fmt(vl(x,c))}</td>`).join('')+'</tr>';
+  });
+  $('#cmp-tb').innerHTML = `<tr><th>Company</th>${r.map(x=>`<td><b>${vl(x,'Company')}</b></td>`).join('')}</tr>`+ht;
+}
+
+let s3c='';
+function r_360(){
+  const r=R.find(x=>String(vl(x,'Company'))==s3c); if(!r){$('#s360-out').innerHTML='<div style="padding:40px;text-align:center;color:var(--mu)">Search and select a company to view metrics.</div>';return;}
+  const dt=(l,c)=>cx(c)>=0?`<div class="s360-m"><small>${l}</small><span class="${cls(vl(r,c))}">${fmt(vl(r,c))}</span></div>`:'';
+  const bar=(c,l,h)=>{
+    if(cx(c)<0||cx(l)<0||cx(h)<0)return '';
+    const cv=vl(r,c),lv=vl(r,l),hv=vl(r,h); if(!num(cv)||!num(lv)||!num(hv)||hv==lv)return '';
+    const pctl=(cv-lv)/(Math.max(0.01,hv-lv))*100.0;
+    return `<div class="s360-m" style="grid-column: 1 / -1"><small>52-Week Range</small><div class="p-bar"><div class="p-dot" style="left:${Math.max(0,Math.min(100,pctl))}%"></div></div><div style="display:flex;justify-content:space-between;font-size:10px"><span>${fmt(lv)}</span><span>${fmt(hv)}</span></div></div>`;
+  };
+  
+  let ht=`<div class="card"><h3>${vl(r,'Company')}</h3>`;
+  ht+=`<p style="font-size:12px;line-height:1.5;color:var(--mu)"><b>Data Snapshot:</b> ${s3c} is trading at Rs. ${fmt(vl(r,'LTP'))}. Its 1-year change is ${fmt(vl(r,'1Y'))}%. RSI is ${fmt(vl(r,'RSI'))}. P/E is ${fmt(vl(r,'P/E (Annu.)'))}, P/B is ${fmt(vl(r,'P/B'))} and ROE is ${fmt(vl(r,'ROE (Annu.)'))}%. The stock is ${fmt(vl(r,'% Below 52 Wk H'))}% below its 52-week high.<br><i>Data summary only — not investment advice.</i></p></div>`;
+  
+  ht+=`<div class="card"><h3>Price & Momentum</h3><div class="s360-g">`+['LTP','% Change','1M','3M','6M','1Y'].map(c=>dt(c,c)).join('')+bar('LTP','52 Wk  Low','52 Wk  High')+`</div></div>`;
+  ht+=`<div class="card"><h3>Technical</h3><div class="s360-g">`+['RSI','MACD','ADX','Stochastic'].map(c=>dt(c,c)).join('')+`</div></div>`;
+  ht+=`<div class="card"><h3>Valuation & Quality</h3><div class="s360-g">`+['P/E  (Annu.)','P/B','P/S','PEG','EPS  (Annu.)','ROE  (Annu.)','ROA  (Annu.)','NPM'].map(c=>dt(c,c)).join('')+`</div></div>`;
+  ht+=`<div class="card"><h3>Dividend</h3><div class="s360-g">`+['Cash','Bonus','Total','Dividend  Yield'].map(c=>dt(c,c)).join('')+`</div></div>`;
+  
+  $('#s360-out').innerHTML=ht;
+}
+
+function r_div(){
+  const q=$('#div-sq').value.trim().toLowerCase(), f=$('#div-f').value;
+  let r=R.filter(x=>{
+    if(q && !String(vl(x,'Company')).toLowerCase().includes(q)) return false;
+    let y=vl(x,'Dividend Yield');
+    if(f=='yes' && !(num(y)&&y>0)) return false;
+    if(f=='high' && !(num(y)&&y>5)) return false;
+    return true;
+  });
+  r.sort((a,b)=>vl(b,'Dividend Yield')-vl(a,'Dividend Yield'));
+  const h=['Company','LTP','Dividend Yield','Cash','Bonus','Total','EPS (Annu.)','ROE (Annu.)'].filter(c=>cx(c)>=0).map(c=>C[cx(c)]);
+  $('#div-th').innerHTML='<tr>'+h.map(c=>`<th>${c}</th>`).join('')+'</tr>';
+  $('#div-tb').innerHTML=r.map(x=>'<tr>'+h.map(c=>`<td class="${c=='Company'?'co':''}">${fmt(vl(x,c))}</td>`).join('')+'</tr>').join('');
+}
+function renderView(){
+  if(curV=='v-s') r_scr();
+  else if(curV=='v-mkt') r_mkt();
+  else if(curV=='v-map') r_map();
+  else if(curV=='v-sig') r_sig();
+  else if(curV=='v-val') r_val();
+  else if(curV=='v-qua') r_qua();
+  else if(curV=='v-cmp') r_cmp();
+  else if(curV=='v-360') r_360();
+  else if(curV=='v-div') r_div();
+  else if(curV=='v-bnk') r_bnk();
+  else if(curV=='v-wch') r_wch();
+}
+
+$('#sdt').textContent='Dataset: '+(D.date||'n/a')+' · '+R.length+' companies · '+C.length+' points';$('#sdt2').textContent=D.date||'';
+const scrEl=$('#scr'),dsc=document.getElementById('disc');if(dsc)dsc.before(scrEl);
+
+scrEl.addEventListener('click',e=>{
+  const t=e.target;
+  if(t.dataset.c){sAsc=sSc==t.dataset.c?!sAsc:false;sSc=t.dataset.c;renderView()}
+  else if(t.dataset.x!=null){sFl.splice(+t.dataset.x,1);srf()}
+  else if(t.dataset.p){ sFl=[];srf()}
+  else if(t.id=='sadd'){sFl.push({c:NUMC[0],a:'',b:''});srf()}
+  else if(t.id=='sclr'){sFl=[];$('#sq').value='';srf()}
+  else if(t.id=='cmp-clr'){cL=[];r_cmp()}
+  else if(t.dataset.cx){cL=cL.filter(c=>c!=t.dataset.cx);r_cmp()}
+  
+function r_bnk(){
+  const h=['Company','LTP','NIM','NPL to Total Loan','Credit to Deposit','Interest Rate Spread','ROE (Annu.)','ROA (Annu.)'].filter(c=>cx(c)>=0).map(c=>C[cx(c)]);
+  const r=R.filter(x=>h.slice(2).some(c=>num(vl(x,c))));
+  r.sort((a,b)=>vl(b,'NIM')-vl(a,'NIM'));
+  $('#bnk-th').innerHTML='<tr>'+h.map(c=>`<th>${c}</th>`).join('')+'</tr>';
+  $('#bnk-tb').innerHTML=r.map(x=>'<tr>'+h.map(c=>`<td class="${c=='Company'?'co':''}">${fmt(vl(x,c))}</td>`).join('')+'</tr>').join('');
+}
+
+let wList = [];
+try{ wList = JSON.parse(localStorage.getItem('nepse_wch')||'[]'); }catch(e){}
+function saveWch(){ try{ localStorage.setItem('nepse_wch',JSON.stringify(wList)); }catch(e){} }
+function r_wch(){
+  const h=['Company','LTP','% Change','1M','3M','1Y','RSI','P/E (Annu.)','P/B','Dividend Yield'].filter(c=>cx(c)>=0).map(c=>C[cx(c)]);
+  const r=R.filter(x=>wList.includes(String(vl(x,'Company'))));
+  $('#wch-th').innerHTML='<tr>'+h.map(c=>`<th>${c}</th>`).join('')+`<th>Remove</th></tr>`;
+  $('#wch-tb').innerHTML=r.length?r.map(x=>'<tr>'+h.map(c=>`<td class="${c=='Company'?'co':''} ${cls(vl(x,c))}">${fmt(vl(x,c))}</td>`).join('')+`<td><button data-wr="${vl(x,'Company')}">✕</button></td></tr>`).join(''):'<tr><td colspan="99" style="color:var(--mu);text-align:center;padding:30px">Watchlist is empty.</td></tr>';
+}
+
+  else if(t.dataset.wr){wList=wList.filter(c=>c!=t.dataset.wr);saveWch();r_wch()}
+  else if(t.id=='wch-clr'){wList=[];saveWch();r_wch()}
+  else if(t.id=='s360-rnd'){s3c=String(R[Math.floor(Math.random()*R.length)][cx('Company')]);$('#s360-sq').value=s3c;r_360()}
+});
+scrEl.addEventListener('change',e=>{
+  if(e.target.dataset.col){sCols=C.filter(c=>document.querySelector(`[data-col="${c}"]`).checked);renderView();}
+  if(['map-met','sig-sel','val-x','val-y','qua-x','qua-y','div-f'].includes(e.target.id)) renderView();
+});
+scrEl.addEventListener('input',e=>{
+  const t=e.target;
+  if(t.dataset.k){sFl[+t.dataset.i][t.dataset.k]=t.value;renderView()}
+  else if(t.id=='sq' || t.id=='div-sq') renderView();
+  else if(t.id=='cmp-sq'){ let q=t.value.toUpperCase(); let m=R.find(x=>String(vl(x,'Company'))==q); if(m&&!cL.includes(q)&&cL.length<5){cL.push(q);t.value='';r_cmp();} }
+  else if(t.id=='s360-sq'){ let q=t.value.toUpperCase(); let m=R.find(x=>String(vl(x,'Company'))==q); if(m){s3c=q;r_360();} }
+  else if(t.id=='wch-sq'){ let q=t.value.toUpperCase(); let m=R.find(x=>String(vl(x,'Company'))==q); if(m&&!wList.includes(q)){wList.push(q);saveWch();t.value='';r_wch();} }
+});
+
+const PRE={'Value':[['P/E (Annu.)',0.01,15],['P/B',0.01,2]],'Yield >= 5%':[['Dividend Yield',5,'']]};
+$('#spre').innerHTML='<b>Pre:</b> '+Object.keys(PRE).map(k=>`<button data-p="${k}">${k}</button>`).join('');
+$('#scp').innerHTML=C.map(c=>`<label><input type=checkbox data-col="${c}" ${sCols.includes(c)?'checked':''}> ${c}</label>`).join('');
+
+})();
+</script>
+'''
 
 
 def inject_screener(html_doc: str) -> str:
