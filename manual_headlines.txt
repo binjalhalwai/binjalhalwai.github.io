@@ -1,5 +1,5 @@
 # Manual headlines for portals that do not allow automated access
-# (ShareSansar, MeroLagani, Nepali Paisa, NepseAlpha).
+# (MeroLagani, Nepali Paisa, NepseAlpha).
 # You read the portal page yourself, copy the headlines, and commit this file on GitHub.
 # The workflow then adds them to the NewsPortal. Re-adding the same line is harmless.
 #
@@ -7,18 +7,18 @@
 #   1. A date header line:        ## 2026-10-04
 #   2. Then one headline per line: source | headline | link (link is optional)
 #
-# Sources: sharesansar, merolagani, nepalipaisa, nepsealpha
+# Sources: merolagani, nepalipaisa, nepsealpha
 # Headlines must be 15-300 characters. Lines dated more than 3 days ago are ignored,
 # so you can delete old days whenever you like.
 # If a link is given it must be on that portal's own website.
 #
 # EXAMPLE (the lines below start with "# " so they are only notes):
 # ## 2026-10-04
-# sharesansar | Your copied ShareSansar headline goes here | https://www.sharesansar.com/newsdetail/...
 # merolagani | Your copied MeroLagani headline goes here
 
 ## 2026-10-04
 merolagani | सरकारले निम्न र मध्यम आय भएका नागरिकलाई सरल किस्ताबन्दीमा घर उपलब्ध गराउने | https://merolagani.com/NewsDetail.aspx?newsID=131483
+nepsealpha | Nepse Alpha द्वारा 'Pine Script' Indicator , Pine Strategy Coding र Sastoshare Pine AI फिचर सार्वजनिक | https://nepsealpha.com/post/detail/8666/nepse-alpha-releases-pine-script-indicator-pine-strategy-coding-and-sastoshare-pine-ai-feature
 
 ## 2026-10-02
 sharesansar | Know How Did The Mutual Funds Perform in Bhadra, A Complete Analysis of Multiple Factors | https://www.sharesansar.com/newsdetail/know-how-did-the-mutual-funds-perform-in-bhadra-a-complete-analysis-of-multiple-factors-2026-10-02
