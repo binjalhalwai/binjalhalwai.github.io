@@ -100,7 +100,7 @@ _load_dotenv(Path(__file__).resolve().parent / ".env")
 # Configuration
 # --------------------------------------------------------------------------------------
 APP_NAME = "Binjal Halwai NewsPortal"
-VERSION = "1.2.5"
+VERSION = "1.2.6"
 HOST = os.getenv("NNH_HOST", "127.0.0.1")
 PORT = int(os.getenv("NNH_PORT", "8000"))
 ADMIN_TOKEN = os.getenv("NNH_ADMIN_TOKEN", "")
@@ -2862,17 +2862,24 @@ def cmd_manual_import(args):
     items, problems = parse_manual_text(path.read_text(encoding="utf-8"), sources, max_age_days=args.days)
     settings = store.settings()
     clf = Classifier(store.keywords(), settings["thresholds"])
-    added = dup = 0
+    added = dup = promoted = 0
     with db() as c:
         for sid, arts in items.items():
             src = next(x for x in sources if x["id"] == sid)
             new, _ = ingest(c, arts, src, clf, settings)
             added += new
             dup += len(arts) - new
+            # You chose these headlines yourself, so they must be visible even when the keyword classifier would
+            # rate them 'excluded'/'low' (e.g. a housing-policy story). Also repairs rows imported by v1.2.4.
+            for a in arts:
+                promoted += c.execute(
+                    "UPDATE articles SET relevance='medium' WHERE canonical_url=? AND relevance IN ('excluded','low')",
+                    (canonical_url(a["url"]),)).rowcount
             print(f"{src['name']:<16} read={len(arts):<3} new={new}")
     for pr in problems:
         print("WARNING:", pr)
-    print(f"Manual import done: {added} added, {dup} already present, {len(problems)} line(s) with problems.")
+    print(f"Manual import done: {added} added, {dup} already present, {promoted} made visible, "
+          f"{len(problems)} line(s) with problems.")
 
 
 
@@ -3628,7 +3635,7 @@ DASHBOARD_HTML = (DASHBOARD_HTML.replace("</style></head>", _EXT_CSS + "</style>
 #      Nepse Alpha), so that their stories still join the repeated-story and priority logic.
 # Nothing here bypasses any site's terms: sources with permitted=false are still never fetched automatically.
 # ======================================================================================
-VERSION = "1.2.5"  # Phase-1: SEO/a11y, mobile screener, Nepali NFC, source registry
+VERSION = "1.2.6"  # Phase-1: SEO/a11y, mobile screener, Nepali NFC, source registry
 PRIORITY_RANK = {   # your order: 1 = searched first
     "sharesansar": 1, "merolagani": 2, "nepalipaisa": 3, "nepsealpha": 4, "arthasansar": 5, "bizpati": 6,
     "bajarkochirfar": 7, "eng_bajarkochirfar": 7, "aarthiknews": 8, "abhiyandaily": 10,
