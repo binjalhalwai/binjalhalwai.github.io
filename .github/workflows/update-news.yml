@@ -4,20 +4,24 @@ name: Update NewsPortal
 
 on:
   schedule:
-    # All cron times are UTC; Nepal = UTC + 5:45.  Minutes are deliberately off-peak (:06 :21 :36 :51)
-    # because GitHub delays or skips runs that start at busy minutes (:00 :10 :30 ...).
+    # All cron times are UTC; Nepal = UTC + 5:45.  Runs start a few minutes past the hour on purpose
+    # (:06 :21 :36 :51 Nepal-clock-wise) because GitHub delays or skips runs at busy minutes (:00 :30).
     #
     # NEPSE trades Monday-Friday (Saturday and Sunday closed).  Schedule in Nepal time:
-    #   Mon-Fri  06:00-20:00  every 15 minutes   (market day, most news)
-    #   Mon-Fri  night        every 60 minutes
-    #   Sat/Sun  all day      every 60 minutes   (market closed, little news)
+    #   Mon-Fri  06:00-20:00        every 15 minutes   (market day, most news)
+    #   Sat/Sun  06:00-20:00        every 60 minutes   (market closed, little news)
+    #   Every day, night            only 20:00, 22:00, 02:00 and 06:00   (about :06 past each)
     #
-    # Mon-Fri 06:00-20:00 NPT = 00:15-14:15 UTC on the same weekday (cron days 1-5)
-    - cron: "21,36,51 0 * * 1-5"        # 06:06-06:36 NPT, every 15 min
-    - cron: "6,21,36,51 1-13 * * 1-5"   # 06:51-19:36 NPT, every 15 min
-    # Outside that window: once an hour (also covers the nights before/after each market day)
-    - cron: "6 0,14-23 * * 1-5"         # 05:51 and 19:51-04:51 NPT
-    - cron: "6 * * * 0,6"               # Sat + Sun (UTC days): once an hour, all day
+    # 06:06 NPT = 00:21 UTC (same weekday), 20:06 NPT = 14:21 UTC, 22:06 NPT = 16:21 UTC,
+    # 02:06 NPT (next day) = 20:21 UTC.
+    # Mon-Fri, 06:06 -> 20:06 NPT, every 15 minutes (cron days 1-5)
+    - cron: "21,36,51 0 * * 1-5"        # 06:06 06:21 06:36 NPT
+    - cron: "6,21,36,51 1-13 * * 1-5"   # 06:51 ... 19:36 NPT
+    - cron: "6,21 14 * * 1-5"           # 19:51 and 20:06 NPT (20:06 = the 8 PM run)
+    # Sat + Sun (cron days 6 and 0), 06:06 -> 20:06 NPT, once an hour
+    - cron: "21 0-14 * * 0,6"
+    # Every day: night runs at 22:06 and 02:06 NPT (06:06 and 20:06 are covered above)
+    - cron: "21 16,20 * * *"
   workflow_dispatch:          # lets you press "Run workflow" yourself
   push:                       # re-publish right after you upload a new screener file
     paths:
