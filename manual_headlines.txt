@@ -1,0 +1,19 @@
+# Manual headlines for portals that do not allow automated access
+# (ShareSansar, MeroLagani, Nepali Paisa, NepseAlpha).
+# You read the portal page yourself, copy the headlines, and commit this file on GitHub.
+# The workflow then adds them to the NewsPortal. Re-adding the same line is harmless.
+#
+# FORMAT
+#   1. A date header line:        ## 2026-10-04
+#   2. Then one headline per line: source | headline | link (link is optional)
+#
+# Sources: sharesansar, merolagani, nepalipaisa, nepsealpha
+# Headlines must be 15-300 characters. Lines dated more than 3 days ago are ignored,
+# so you can delete old days whenever you like.
+# If a link is given it must be on that portal's own website.
+#
+# EXAMPLE (remove the # at the start of the three lines to use them):
+# ## 2026-10-04
+# sharesansar | Your copied ShareSansar headline goes here | https://www.sharesansar.com/newsdetail/...
+# merolagani | Your copied MeroLagani headline goes here
+

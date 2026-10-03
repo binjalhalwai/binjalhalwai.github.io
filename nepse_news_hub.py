@@ -100,7 +100,7 @@ _load_dotenv(Path(__file__).resolve().parent / ".env")
 # Configuration
 # --------------------------------------------------------------------------------------
 APP_NAME = "Binjal Halwai NewsPortal"
-VERSION = "1.2.2"
+VERSION = "1.2.4"
 HOST = os.getenv("NNH_HOST", "127.0.0.1")
 PORT = int(os.getenv("NNH_PORT", "8000"))
 ADMIN_TOKEN = os.getenv("NNH_ADMIN_TOKEN", "")
@@ -2785,6 +2785,97 @@ def cmd_init(args):
     print(f"Initialised {CFG.data_dir} (sources.json, keywords.json, settings.json, nepse_news.db) and .env.example")
 
 
+# --------------------------------------------------------------------------------------
+# manual_headlines.txt  ->  hub  (for portals whose terms forbid automated access)
+# --------------------------------------------------------------------------------------
+MANUAL_FILE = Path(__file__).resolve().parent / "manual_headlines.txt"
+
+
+def parse_manual_text(text, sources, today=None, max_age_days=3):
+    """Parse the hand-typed headline file. Format:
+        ## 2026-10-04            <- date header; applies to the lines below it
+        sharesansar | Headline text copied from the page | https://www.sharesansar.com/newsdetail/...   (link optional)
+    Returns (items_by_source_id, problems). Lines older than max_age_days are ignored."""
+    import hashlib
+    today = today or utcnow().date()
+    by_key = {}
+    for sc in sources:
+        by_key[str(sc["id"]).lower()] = sc
+        by_key[str(sc["name"]).lower()] = sc
+    host = lambda u: (urlparse(u).hostname or "").lower().removeprefix("www.")  # noqa: E731
+    out, problems, seen = {}, [], set()
+    cur_date = None
+    for n, raw in enumerate(text.splitlines(), 1):
+        line = raw.strip().lstrip("﻿")
+        if not line or (line.startswith("#") and not line.startswith("##")):
+            continue
+        if line.startswith("##"):
+            try:
+                cur_date = datetime.strptime(line.lstrip("#").strip()[:10], "%Y-%m-%d").date()
+            except ValueError:
+                cur_date = None
+                problems.append(f"line {n}: bad date header (use ## YYYY-MM-DD)")
+            continue
+        if cur_date is None:
+            problems.append(f"line {n}: no date header above this line")
+            continue
+        if (today - cur_date).days > max_age_days or cur_date > today + timedelta(days=1):
+            continue
+        parts = [x.strip() for x in line.split("|")]
+        if len(parts) < 2:
+            problems.append(f"line {n}: expected  source | headline | optional link")
+            continue
+        src = by_key.get(parts[0].lower())
+        if src is None:
+            problems.append(f"line {n}: unknown source '{parts[0]}'")
+            continue
+        title = clean_text(parts[1])
+        if not (15 <= len(title) <= 300):
+            problems.append(f"line {n}: headline must be 15-300 characters")
+            continue
+        sh, base = host(src["url"]), src["url"].rstrip("/")
+        url = parts[2] if len(parts) > 2 else ""
+        if url and not (is_http_url(url) and (host(url) == sh or host(url).endswith("." + sh))):
+            problems.append(f"line {n}: link is not on {sh}; used the portal front page instead")
+            url = ""
+        if not url:
+            url = base + "/?mh=" + hashlib.sha1(title.lower().encode("utf-8")).hexdigest()[:12]
+        key = (src["id"], title.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        pub = min(datetime(cur_date.year, cur_date.month, cur_date.day, 6, 0, tzinfo=UTC), utcnow())
+        out.setdefault(src["id"], []).append({"url": url, "title": title, "excerpt": "",
+                                              "published_at": pub, "date_quality": "missing"})
+    return out, problems
+
+
+def cmd_manual_import(args):
+    """Read manual_headlines.txt (typed by you) and add the headlines to the hub. Safe to run every time."""
+    path = Path(args.file) if args.file else MANUAL_FILE
+    if not path.exists():
+        print(f"No {path.name} found - nothing to import.")
+        return
+    store = Store(CFG.data_dir)
+    init_db()
+    sources = store.sources()
+    items, problems = parse_manual_text(path.read_text(encoding="utf-8"), sources, max_age_days=args.days)
+    settings = store.settings()
+    clf = Classifier(store.keywords(), settings["thresholds"])
+    added = dup = 0
+    with db() as c:
+        for sid, arts in items.items():
+            src = next(x for x in sources if x["id"] == sid)
+            new, _ = ingest(c, arts, src, clf, settings)
+            added += new
+            dup += len(arts) - new
+            print(f"{src['name']:<16} read={len(arts):<3} new={new}")
+    for pr in problems:
+        print("WARNING:", pr)
+    print(f"Manual import done: {added} added, {dup} already present, {len(problems)} line(s) with problems.")
+
+
+
 def main(argv=None):
     for stream in (sys.stdout, sys.stderr):
         try:
@@ -2806,6 +2897,9 @@ def main(argv=None):
     sv.add_argument("--apply", action="store_true")
     sub.add_parser("selftest", help="offline functional tests")
     sub.add_parser("publish", help="build public_site/index.html (static, headlines + links only)")
+    sm = sub.add_parser("manual-import", help="add headlines typed into manual_headlines.txt")
+    sm.add_argument("--file")
+    sm.add_argument("--days", type=int, default=3)
     si = sub.add_parser("init", help="create data files")
     si.add_argument("--reset-sources", action="store_true")
     si.add_argument("--reset-keywords", action="store_true")
@@ -2816,7 +2910,8 @@ def main(argv=None):
     setup_logging()
     if args.cmd == "selftest":
         sys.exit(cmd_selftest(args))
-    {"serve": cmd_serve, "collect": cmd_collect, "verify-sources": cmd_verify, "init": cmd_init, "publish": cmd_publish}[args.cmd](args)
+    {"serve": cmd_serve, "collect": cmd_collect, "verify-sources": cmd_verify, "init": cmd_init, "publish": cmd_publish,
+     "manual-import": cmd_manual_import}[args.cmd](args)
 
 # --------------------------------------------------------------------------------------
 # Dashboard (served at /; also reused for the standalone snapshot export)
@@ -3533,7 +3628,7 @@ DASHBOARD_HTML = (DASHBOARD_HTML.replace("</style></head>", _EXT_CSS + "</style>
 #      Nepse Alpha), so that their stories still join the repeated-story and priority logic.
 # Nothing here bypasses any site's terms: sources with permitted=false are still never fetched automatically.
 # ======================================================================================
-VERSION = "1.2.2"  # Phase-1: SEO/a11y, mobile screener, Nepali NFC, source registry
+VERSION = "1.2.4"  # Phase-1: SEO/a11y, mobile screener, Nepali NFC, source registry
 PRIORITY_RANK = {   # your order: 1 = searched first
     "sharesansar": 1, "merolagani": 2, "nepalipaisa": 3, "nepsealpha": 4, "arthasansar": 5, "bizpati": 6,
     "bajarkochirfar": 7, "eng_bajarkochirfar": 7, "aarthiknews": 8, "abhiyandaily": 10,
@@ -3767,6 +3862,48 @@ def create_app(store, engine, sched=None):
         return {"added": bool(new), "duplicate": not new, "id": row["id"] if row else None,
                 "relevance": row["relevance"] if row else None}
 
+    @app.post("/api/manual-bulk", dependencies=[Depends(_admin)])
+    def manual_bulk(payload: dict = Body(...)):
+        """Add several headlines you copied yourself from a portal that does not allow automated access (max 100).
+        Nothing is fetched from the portal. A headline without a usable link on the source's own site is stored
+        with a portal front-page link plus a unique ?mh= marker so duplicates are still detected."""
+        import hashlib
+        sid = str(payload.get("source_id") or "").strip()
+        src = next((s for s in store.sources() if s["id"] == sid), None)
+        if src is None:
+            raise HTTPException(404, "source not found")
+        raw = payload.get("items")
+        if not isinstance(raw, list) or not raw or len(raw) > 100:
+            raise HTTPException(400, "Send between 1 and 100 headlines")
+        host = lambda u: (urlparse(u).hostname or "").lower().removeprefix("www.")  # noqa: E731
+        sh, base = host(src["url"]), src["url"].rstrip("/")
+        arts, seen, skipped = [], set(), 0
+        for it in raw:
+            if not isinstance(it, dict):
+                skipped += 1
+                continue
+            title = clean_text(it.get("title") or "")
+            url = str(it.get("url") or "").strip()
+            if not (15 <= len(title) <= 300):
+                skipped += 1
+                continue
+            if url and not (is_http_url(url) and (host(url) == sh or host(url).endswith("." + sh))):
+                url = ""
+            if not url:
+                url = base + "/?mh=" + hashlib.sha1(title.lower().encode("utf-8")).hexdigest()[:12]
+            if title.lower() in seen:
+                continue
+            seen.add(title.lower())
+            arts.append({"url": url, "title": title, "excerpt": "", "published_at": None,
+                         "date_quality": "missing"})
+        settings = store.settings()
+        clf = Classifier(store.keywords(), settings["thresholds"])
+        with db() as c:
+            new, _ = ingest(c, arts, src, clf, settings)
+        _hot_cache.clear()
+        _cover["t"] = 0.0
+        return {"added": new, "duplicates": len(arts) - new, "skipped": skipped}
+
     return app
 
 
@@ -3824,6 +3961,44 @@ bt.onclick=async()=>{msg.textContent='';if(!sel.value){msg.textContent='No manua
   let d={};try{d=await r.json()}catch(e){}
   if(r.ok){msg.textContent=d.duplicate?'Already in the hub.':'Added ('+d.relevance+'). It now takes part in repeated-story detection.';ti.value=ur.value=''}
   else msg.textContent='Could not add: '+(d.detail||r.status)};
+/* E) bulk paste: you copy the page text yourself, paste it here, tick the headlines to keep */
+const bp=el('details');bp.id='bulkPanel';bp.append(el('summary',null,'＋ Paste many headlines at once (copy the portal page yourself, then Ctrl+V here)'));
+const bf=el('div','mf'),bsel=el('select'),bta=el('textarea'),blist=el('div'),bsave=el('button','btn',' Add ticked headlines'),bmsg=el('div','cnt');
+bta.rows=4;bta.placeholder='On the portal news page press Ctrl+A, then Ctrl+C. Click here and press Ctrl+V.';
+bf.append(el('span',null,'Source'),bsel,el('span',null,'Paste here'),bta,el('span',null,'Found'),blist,el('span'),bsave,el('span'),bmsg);bp.append(bf);mp.after(bp);
+let bsrc=[],bitems=[],lastHtml='';
+(async()=>{try{bsrc=(await(await fetch('/api/sources')).json()).filter(s=>s.method==='manual'&&s.priority).sort((a,b)=>(a.rank||99)-(b.rank||99));
+  bsrc.forEach(s=>{const o=el('option',null,s.name);o.value=s.id;bsel.append(o)})}catch(e){}})();
+const hostOf=u=>{try{return new URL(u).hostname.toLowerCase().replace(/^www\./,'')}catch(e){return''}};
+const okHost=(u,s)=>{const h=hostOf(u),b=hostOf(s.url);return !!h&&(h===b||h.endsWith('.'+b))};
+function bparse(html,plain){
+  const s=bsrc.find(x=>x.id===bsel.value),out=[],seen=new Set();
+  const add=(t,u)=>{t=t.replace(/\s+/g,' ').trim();if(t.length<20||t.length>300||t.split(' ').length<3)return;
+    const k=t.toLowerCase();if(seen.has(k))return;seen.add(k);out.push({title:t,url:u||'',on:true})};
+  if(html&&s&&/<a\s/i.test(html)){
+    const doc=new DOMParser().parseFromString(html,'text/html');   // inert document: nothing is run or loaded
+    doc.querySelectorAll('a[href]').forEach(a=>{let u='';try{u=new URL(a.getAttribute('href'),s.url).href}catch(e){}
+      if(u&&okHost(u,s))add(a.textContent,u)})}
+  if(!out.length)(plain||'').split(/\r?\n/).forEach(l=>add(l,''));
+  return out.slice(0,100)}
+function bshow(){blist.replaceChildren();
+  if(!bitems.length){blist.textContent='Nothing found yet.';return}
+  blist.append(el('div','cnt',bitems.length+' possible headlines. Untick anything that is not news.'));
+  bitems.forEach(it=>{const row=el('label'),cb=el('input');row.style.cssText='display:flex;gap:6px;align-items:flex-start;padding:2px 0';
+    cb.type='checkbox';cb.checked=it.on;cb.style.width='auto';cb.onchange=()=>{it.on=cb.checked};
+    row.append(cb,el('span',null,it.title+(it.url?'':'   (no link: will point to the portal front page)')));blist.append(row)})}
+bshow();
+bta.addEventListener('paste',e=>{const cd=e.clipboardData;if(!cd)return;e.preventDefault();
+  lastHtml=cd.getData('text/html');const p=cd.getData('text/plain');bta.value=p.slice(0,30000);bitems=bparse(lastHtml,p);bshow()});
+bta.addEventListener('input',()=>{lastHtml='';bitems=bparse('',bta.value);bshow()});
+bsel.onchange=()=>{bitems=bparse(lastHtml,bta.value);bshow()};
+bsave.onclick=async()=>{bmsg.textContent='';const items=bitems.filter(i=>i.on).map(i=>({title:i.title,url:i.url}));
+  if(!bsel.value||!items.length){bmsg.textContent='Choose a source and tick at least one headline.';return}
+  const r=await fetch('/api/manual-bulk',{method:'POST',headers:{'Content-Type':'application/json','X-Admin-Token':tok()},
+    body:JSON.stringify({source_id:bsel.value,items})});
+  let d={};try{d=await r.json()}catch(e){}
+  if(r.ok){bmsg.textContent='Added '+d.added+', already in the hub '+d.duplicates+(d.skipped?', skipped '+d.skipped:'')+'.';bta.value='';bitems=[];lastHtml='';bshow()}
+  else bmsg.textContent='Could not add: '+(d.detail||r.status)};
 })();
 </script>"""
 
