@@ -100,7 +100,7 @@ _load_dotenv(Path(__file__).resolve().parent / ".env")
 # Configuration
 # --------------------------------------------------------------------------------------
 APP_NAME = "Binjal Halwai NewsPortal"
-VERSION = "1.2.6"
+VERSION = "1.2.7"
 HOST = os.getenv("NNH_HOST", "127.0.0.1")
 PORT = int(os.getenv("NNH_PORT", "8000"))
 ADMIN_TOKEN = os.getenv("NNH_ADMIN_TOKEN", "")
@@ -382,8 +382,11 @@ DEFAULT_KEYWORDS = {
         _g("market_trends", "Trends & technicals", 5, "medium", ["market_trends"],
            ["bull market", "bear market", "bullish", "bearish", "market correction", "market rally",
             "technical analysis", "support level", "resistance level", "moving average", "RSI",
-            "investor sentiment", "profit booking", "profit-taking", "sell-off"],
-           ["प्राविधिक विश्लेषण", "सपोर्ट लेभल", "रेजिस्टेन्स", "बुलिस", "बियरिस", "बजार करेक्सन", "नाफा बुकिङ"]),
+            "investor sentiment", "profit booking", "profit-taking", "sell-off",
+            "Pine Script", "Pine Strategy", "Pine AI", "technical indicator", "trading indicator", "chart pattern",
+            "candlestick"],
+           ["प्राविधिक विश्लेषण", "सपोर्ट लेभल", "रेजिस्टेन्स", "बुलिस", "बियरिस", "बजार करेक्सन", "नाफा बुकिङ",
+            "पाइन स्क्रिप्ट", "टेक्निकल एनालिसिस", "चार्ट प्याटर्न", "क्यान्डलस्टिक"]),
         _g("primary_market", "IPO / FPO / rights", 10, "high", ["ipo"],
            ["IPO", "initial public offering", "FPO", "further public offering", "right share", "rights share",
             "rights issue", "right issue", "public issue", "share allotment", "issue manager", "underwriter",
@@ -3635,7 +3638,7 @@ DASHBOARD_HTML = (DASHBOARD_HTML.replace("</style></head>", _EXT_CSS + "</style>
 #      Nepse Alpha), so that their stories still join the repeated-story and priority logic.
 # Nothing here bypasses any site's terms: sources with permitted=false are still never fetched automatically.
 # ======================================================================================
-VERSION = "1.2.6"  # Phase-1: SEO/a11y, mobile screener, Nepali NFC, source registry
+VERSION = "1.2.7"  # Phase-1: SEO/a11y, mobile screener, Nepali NFC, source registry
 PRIORITY_RANK = {   # your order: 1 = searched first
     "sharesansar": 1, "merolagani": 2, "nepalipaisa": 3, "nepsealpha": 4, "arthasansar": 5, "bizpati": 6,
     "bajarkochirfar": 7, "eng_bajarkochirfar": 7, "aarthiknews": 8, "abhiyandaily": 10,
