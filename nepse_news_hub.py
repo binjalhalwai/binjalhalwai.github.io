@@ -1827,8 +1827,7 @@ svg.chart{width:100%;height:180px;overflow:visible;font-size:10px;font-family:in
      <div class="tw"><table><thead id="div-th"></thead><tbody id="div-tb"></tbody></table></div>
   </div>
   <div class="ft">Data: Smart Wealth Pro dataset <span id="sdt2"></span>. Dashboard by Binjal Halwai. For info/education only.</div>
-
-  <div id="v-bnk" class="subv" hidden>
+<div id="v-bnk" class="subv" hidden>
      <div class="c-grid" id="bnk-chs"></div>
      <div class="tw" style="margin-top:10px"><table><thead id="bnk-th"></thead><tbody id="bnk-tb"></tbody></table></div>
   </div>
@@ -1839,7 +1838,6 @@ svg.chart{width:100%;height:180px;overflow:visible;font-size:10px;font-family:in
      </div>
      <div class="tw"><table><thead id="wch-th"></thead><tbody id="wch-tb"></tbody></table></div>
   </div>
-
 </section>
 <script>
 (function(){
@@ -1894,10 +1892,7 @@ function scatter(elId, rws, flx, fly) {
   pts.forEach(p=>{
     const rad = Math.max(3, Math.min(25, p.m/1000000.0));
     htm += `<circle cx="${px(p.x)}" cy="${py(p.y)}" r="${rad}" fill="var(--ac)" opacity="0.6">`+
-           `<title>${p.c}
-${flx}: ${fmt(p.x)}
-${fly}: ${fmt(p.y)}
-M.Cap: ${fmt(p.m)}</title></circle>`;
+           `<title>${p.c}\n${flx}: ${fmt(p.x)}\n${fly}: ${fmt(p.y)}\nM.Cap: ${fmt(p.m)}</title></circle>`;
   });
   el.innerHTML=htm;
 }
@@ -1935,9 +1930,7 @@ function r_map(){
   $('#m-map').innerHTML = r.map(x=>{
     const v=vl(x,met), mc=vl(x,'Market Cap');
     const bg = v>4?'#16a34a':v>1?'#4ade80':v<-4?'#e11d48':v<-1?'#fb7185':'#8b9470';
-    return `<div class="tile" style="background:${bg};width:${Math.max(40,mc/mca)}px" title="${vl(x,'Company')}
-${met}: ${fmt(v)}
-M.Cap: ${fmt(mc)}"><b>${String(vl(x,'Company')).substring(0,8)}</b><span>${fmt(v)}${met.includes('%')?'%':''}</span></div>`;
+    return `<div class="tile" style="background:${bg};width:${Math.max(40,mc/mca)}px" title="${vl(x,'Company')}\n${met}: ${fmt(v)}\nM.Cap: ${fmt(mc)}"><b>${String(vl(x,'Company')).substring(0,8)}</b><span>${fmt(v)}${met.includes('%')?'%':''}</span></div>`;
   }).join('');
 }
 
@@ -2032,8 +2025,7 @@ scrEl.addEventListener('click',e=>{
   else if(t.id=='sclr'){sFl=[];$('#sq').value='';srf()}
   else if(t.id=='cmp-clr'){cL=[];r_cmp()}
   else if(t.dataset.cx){cL=cL.filter(c=>c!=t.dataset.cx);r_cmp()}
-  
-function r_bnk(){
+  function r_bnk(){
   const h=['Company','LTP','NIM','NPL to Total Loan','Credit to Deposit','Interest Rate Spread','ROE (Annu.)','ROA (Annu.)'].filter(c=>cx(c)>=0).map(c=>C[cx(c)]);
   const r=R.filter(x=>h.slice(2).some(c=>num(vl(x,c))));
   r.sort((a,b)=>vl(b,'NIM')-vl(a,'NIM'));
