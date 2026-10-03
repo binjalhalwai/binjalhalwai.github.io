@@ -4,10 +4,20 @@ name: Update NewsPortal
 
 on:
   schedule:
-    # GitHub delays or skips scheduled runs that start at busy minutes (:00, :10, :30 ...),
-    # so the minute below is deliberately off-peak.
-    # Every 10 minutes, all day and night (at :06, :16, :26 ... UTC)
-    - cron: "6-59/10 * * * *"
+    # All cron times are UTC; Nepal = UTC + 5:45.  Minutes are deliberately off-peak (:06 :21 :36 :51)
+    # because GitHub delays or skips runs that start at busy minutes (:00 :10 :30 ...).
+    #
+    # NEPSE trades Monday-Friday (Saturday and Sunday closed).  Schedule in Nepal time:
+    #   Mon-Fri  06:00-20:00  every 15 minutes   (market day, most news)
+    #   Mon-Fri  night        every 60 minutes
+    #   Sat/Sun  all day      every 60 minutes   (market closed, little news)
+    #
+    # Mon-Fri 06:00-20:00 NPT = 00:15-14:15 UTC on the same weekday (cron days 1-5)
+    - cron: "21,36,51 0 * * 1-5"        # 06:06-06:36 NPT, every 15 min
+    - cron: "6,21,36,51 1-13 * * 1-5"   # 06:51-19:36 NPT, every 15 min
+    # Outside that window: once an hour (also covers the nights before/after each market day)
+    - cron: "6 0,14-23 * * 1-5"         # 05:51 and 19:51-04:51 NPT
+    - cron: "6 * * * 0,6"               # Sat + Sun (UTC days): once an hour, all day
   workflow_dispatch:          # lets you press "Run workflow" yourself
   push:                       # re-publish right after you upload a new screener file
     paths:
@@ -49,9 +59,17 @@ jobs:
           restore-keys: newsdb-
 
       - name: Collect latest news
-        run: python nepse_news_hub.py collect
-        timeout-minutes: 10          # a hanging site must not hold up the next scheduled run
+        id: collect
+        run: set -o pipefail; python nepse_news_hub.py collect | tee collect_summary.txt
+        timeout-minutes: 7           # a hanging site must not hold up the next scheduled run
         continue-on-error: true      # one bad source must not stop the update
+        env:
+          # Without this, a source checked <15 min ago is skipped, so a 15-minute schedule could
+          # skip every other run if one starts a few seconds early.  12 = always a few minutes
+          # shorter than the shortest gap between runs (15).  Requests stay light: conditional GET
+          # (ETag / If-Modified-Since) where the site supports it.
+          NNH_MIN_INTERVAL_MIN: "12"
+          NNH_CONTACT: ${{ secrets.NNH_CONTACT }}
 
       # Headlines you typed into manual_headlines.txt (portals that do not allow automated access)
       - name: Add manual headlines
@@ -72,6 +90,20 @@ jobs:
 
       - name: Check the page is not empty
         run: test "$(wc -c < public_site/index.html)" -gt 20000
+
+      # Shows on the run's summary page: when it was built and what collection did
+      - name: Run summary
+        if: always()
+        run: |
+          {
+            echo "### NewsPortal build"
+            echo "- Built (UTC): $(date -u '+%Y-%m-%d %H:%M:%S')"
+            echo "- Collect step: ${{ steps.collect.outcome }}"
+            echo "- Page version: $(cat public_site/version.json 2>/dev/null)"
+            echo '```'
+            head -n 8 collect_summary.txt 2>/dev/null || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/configure-pages@v5
 
