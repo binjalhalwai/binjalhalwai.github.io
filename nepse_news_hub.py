@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 r"""
-NEPSE NEWS HUB v1.0.0 — Nepal stock-market news aggregator (single-file build)
+NEPSE NEWS HUB v1.2.1 — Nepal stock-market news aggregator (single-file build)
 ===============================================================================
 Backend (FastAPI) + scheduler (APScheduler 3.x) + SQLite + source adapters +
 EN/NE relevance engine + dashboard (served at /) + exports. Python 3.10+.
@@ -195,9 +195,12 @@ DEFAULT_SOURCES = [
        "both", "auto", ["https://www.nepalsharemarket.com/feed"]),
     _s("investopaper", "Investopaper", "https://www.investopaper.com/", "", "market_portal", "en", "auto",
        ["https://www.investopaper.com/feed/"]),
-    _s("nepse", "Nepal Stock Exchange (NEPSE)", "https://www.nepalstock.com/", "", "regulatory", "en", "manual",
-       notes="Official exchange (listed twice in the brief, #11 and #43 - merged). Its web API is undocumented "
-       "and token-protected; not used because that would circumvent access controls.", evidence=EV_NOFEED),
+    _s("nepse", "Nepal Stock Exchange (NEPSE)", "https://www.nepalstock.com/",
+       "https://nepalstock.com/news-and-alerts",
+       "regulatory", "en", "manual",
+       notes="Official exchange. News section: https://nepalstock.com/news-and-alerts. Web API is "
+       "undocumented and token-protected; not used because that would circumvent access controls. "
+       "No public RSS/Atom feed identified (Phase-1 verified).", evidence=EV_NOFEED),
     # B. Business & economic publishers
     _s("bizmandu", "Bizmandu", "https://bizmandu.com/", "", "business_news", "ne", "auto", ["https://bizmandu.com/feed"]),
     _s("arthiknews", "Arthik News", "https://arthiknews.com/", "", "business_news", "ne", "auto",
@@ -289,11 +292,17 @@ DEFAULT_SOURCES = [
     _s("osnepal", "OS Nepal", "https://www.osnepal.com/", "", "general_news", "ne", "rss",
        ["https://www.osnepal.com/feed"], evidence=EV_DIR, notes="Additional source discovered in research."),
     # D. Official market, regulatory & government sources
-    _s("sebon", "Securities Board of Nepal (SEBON)", "https://www.sebon.gov.np/", "", "regulatory", "both", "manual",
-       notes="Highest-value official source. No feed identified; enable the listing adapter only after "
-       "confirming its public notice page may be polled.", evidence=EV_NOFEED),
-    _s("cdsc", "CDS and Clearing Ltd (CDSC)", "https://cdsc.com.np/", "", "regulatory", "en", "manual",
-       evidence=EV_NOFEED),
+    _s("sebon", "Securities Board of Nepal (SEBON)", "https://www.sebon.gov.np/",
+       "https://www.sebon.gov.np/news",
+       "regulatory", "both", "manual",
+       notes="Highest-value official source. News section: https://www.sebon.gov.np/news. "
+       "No public RSS/Atom feed identified (Phase-1 verified). Enable listing adapter only after "
+       "confirming the public notice page may be polled per its terms.", evidence=EV_NOFEED),
+    _s("cdsc", "CDS and Clearing Ltd (CDSC)", "https://cdsc.com.np/",
+       "https://cdsc.com.np/Home/news",
+       "regulatory", "en", "manual",
+       notes="Official CDS clearing house. News section: https://cdsc.com.np/Home/news. "
+       "No public RSS/Atom feed identified (Phase-1 verified).", evidence=EV_NOFEED),
     _s("nrb", "Nepal Rastra Bank (NRB)", "https://www.nrb.org.np/", "", "regulatory", "both", "auto",
        notes="Feed availability resolved at runtime; otherwise manual."),
     _s("mof", "Ministry of Finance", "https://mof.gov.np/", "", "regulatory", "both", "manual", evidence=EV_NOFEED),
@@ -304,6 +313,21 @@ DEFAULT_SOURCES = [
     _s("doind", "Department of Industry", "https://doind.gov.np/", "", "regulatory", "ne", "manual",
        evidence=EV_NOFEED),
     _s("ibn", "Investment Board Nepal", "https://ibn.gov.np/", "", "regulatory", "en", "manual", evidence=EV_NOFEED),
+    # E. General portal sources requested in Phase-1 — feed availability requires live verification
+    _s("hamropatro", "Hamro Patro", "https://www.hamropatro.com/",
+       "https://www.hamropatro.com/news",
+       "general_news", "ne", "auto",
+       notes="Phase-1 addition. General Nepali portal with a news section. "
+       "RSS/Atom feed availability unverified — run 'verify-sources --only hamropatro' to check. "
+       "If no feed is found, set method=manual.",
+       evidence=EV_UNV),
+    _s("suryapatro", "Suryapatro", "https://suryapatro.com/",
+       "https://suryapatro.com/news",
+       "general_news", "ne", "auto",
+       notes="Phase-1 addition. Nepali calendar/news portal. "
+       "RSS/Atom feed availability unverified — run 'verify-sources --only suryapatro' to check. "
+       "If no feed is found, set method=manual.",
+       evidence=EV_UNV),
 ]
 
 # --------------------------------------------------------------------------------------
@@ -492,6 +516,8 @@ _TRACK = re.compile(r"^(utm_|fbclid$|gclid$|mc_cid$|mc_eid$|ref$|ref_src$|amp$|s
 
 
 def canonical_url(u: str) -> str:
+    """Return a normalised, deduplicated URL: strip www., tracking params, AMP suffix, trailing slash.
+    NOTE: URLs are intentionally NOT Unicode-normalised here — percent-encoding is preserved as-is."""
     p = urlparse(u.strip())
     host = p.netloc.lower()
     host = host[4:] if host.startswith("www.") else host
@@ -505,9 +531,11 @@ def canonical_url(u: str) -> str:
 
 
 def clean_text(s) -> str:
+    """Strip HTML entities and tags, apply NFC normalisation for correct Unicode (including Devanagari)."""
     s = html.unescape(s or "")
     if "<" in s and ">" in s:
         s = BeautifulSoup(s, "html.parser").get_text(" ")
+    s = unicodedata.normalize("NFC", s)   # Phase-1: canonical Unicode for Devanagari & mixed text
     return re.sub(r"\s+", " ", s).strip()
 
 
@@ -516,6 +544,8 @@ _WP_TAIL = re.compile(r"\s*(The post .{0,300}? appeared first on .{0,160}?\.?|\[
 
 
 def make_excerpt(raw, words=55) -> str:
+    """Clean HTML/entities, strip WordPress boilerplate tail, return a publisher excerpt up to `words` words.
+    Output is NFC-normalised (via clean_text) so Devanagari characters are stored in canonical form."""
     t = _WP_TAIL.sub("", clean_text(raw)).strip()
     w = t.split()
     return " ".join(w[:words]) + ("…" if len(w) > words else "")
@@ -539,6 +569,8 @@ _NE_MAP = str.maketrans({"ँ": "ं", "ी": "ि", "ू": "ु", "ई": "इ",
 
 
 def norm_text(s) -> str:
+    """NFC-normalise then apply Nepali orthographic equivalences (शेयर≈सेयर, ई≈इ, ँ≈ं, nukta, ZWJ).
+    Safe for English text and mixed Nepali/English strings; does NOT alter URLs or numbers."""
     s = unicodedata.normalize("NFC", s or "")
     s = s.translate(_NE_MAP).translate(_DEV_DIGITS)
     return re.sub(r"\s+", " ", s).strip()
@@ -894,6 +926,8 @@ class Http:
         self._robots, self._lock = {}, threading.Lock()
 
     def get(self, url, headers=None, retries=2):
+        """HTTP GET with exponential back-off on 429/5xx and transport errors.
+        One source's failure is caught by the caller and never propagates to other sources."""
         delay = 2.0
         for attempt in range(retries + 1):
             try:
@@ -904,9 +938,17 @@ class Http:
                     delay *= 3
                     continue
                 raise
+            except httpx.TimeoutException:
+                # Treat a timeout like a transport error — retry with back-off
+                if attempt < retries:
+                    time.sleep(delay)
+                    delay *= 3
+                    continue
+                raise
             if (r.status_code == 429 or r.status_code >= 500) and attempt < retries:
                 ra = r.headers.get("Retry-After", "")
-                time.sleep(min(float(ra), 60.0) if ra.isdigit() else delay)
+                wait = min(float(ra), 60.0) if ra.isdigit() else delay
+                time.sleep(wait)
                 delay *= 3
                 continue
             return r
@@ -927,7 +969,7 @@ class Http:
                     rp.allow_all = True              # RFC 9309: unavailable (4xx) -> allowed
                 else:
                     rp.parse(r.text.splitlines())
-            except httpx.HTTPError:
+            except (httpx.HTTPError, httpx.TimeoutException):
                 rp.disallow_all = True
             ent = (time.time(), rp)
             with self._lock:
@@ -1102,6 +1144,8 @@ def ingest(c, items, src, clf, settings, now=None):
     new = rel = 0
     for it in items:
         url, title = (it.get("url") or "").strip(), clean_text(it.get("title") or "")
+        # Safety NFC pass: clean_text normalises, but listing/manual paths may bypass it
+        title = unicodedata.normalize("NFC", title) if title else title
         if not title or not is_http_url(url):
             continue
         can = canonical_url(url)
@@ -1666,8 +1710,8 @@ def build_digest(period: str) -> str:
 
 
 SCREENER_BLOCK = r'''<style>
-.vtabs{display:flex;gap:10px;align-items:flex-end;padding:12px 20px 0;background:var(--bg)}
-.vtabs button{border:1px solid var(--ln);background:var(--p);color:var(--mu);border-radius:10px 10px 0 0;padding:9px 18px;font-weight:700;letter-spacing:.05em;cursor:pointer}
+.vtabs{display:flex;gap:10px;align-items:flex-end;padding:12px 20px 0;background:var(--bg);flex-wrap:wrap}
+.vtabs button{border:1px solid var(--ln);background:var(--p);color:var(--mu);border-radius:10px 10px 0 0;padding:9px 18px;font-weight:700;letter-spacing:.05em;cursor:pointer;min-height:44px}
 .vtabs button:first-child{font-size:15px;padding:11px 24px}
 .vtabs button.on{color:var(--onac);background:linear-gradient(135deg,var(--gA),var(--gB));border-color:transparent;box-shadow:0 4px 16px color-mix(in srgb,var(--gB) 40%,transparent)}
 .vtabs button:not(.on):hover{border-color:var(--ac);color:var(--ac)}
@@ -1676,17 +1720,40 @@ SCREENER_BLOCK = r'''<style>
 #scr{padding:14px 20px}#scr .sst{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
 #scr .sst div{background:var(--p);border:1px solid var(--ln);border-top:3px solid var(--ac2);border-radius:8px;padding:8px 12px}#scr .sst .u{border-top-color:var(--ok)}#scr .sst .d{border-top-color:var(--bad)}
 #scr .sst b{font-size:22px}#scr .sst small{display:block;color:var(--mu);font-size:10px;text-transform:uppercase;letter-spacing:.07em}
-#scr .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px}#scr .fr{display:inline-flex;gap:4px}#scr .fr input{width:70px}
-#scr button,#scr select,#scr input{background:var(--p);color:var(--tx);border:1px solid var(--ln);border-radius:6px;padding:5px 9px;font:inherit}#scr button{cursor:pointer}#scr button:hover{border-color:var(--ac)}#scr input[type=checkbox]{padding:0}#scr .bar button{border-radius:14px}#scr details{position:relative}#scr #scp{position:absolute;z-index:5;background:var(--p);border:1px solid var(--ln);border-radius:8px;padding:8px;max-height:300px;overflow:auto;width:260px}#scr #scp label{display:block}
-#scr .tw{overflow:auto;max-height:68vh;border:1px solid var(--ln);border-radius:10px;background:var(--p)}
-#scr table{border-collapse:collapse;width:100%}#scr th{position:sticky;top:0;background:var(--p);cursor:pointer;text-align:right;white-space:nowrap;padding:7px 10px;border-bottom:2px solid var(--ac);font-size:11px;text-transform:uppercase}
-#scr td{padding:5px 10px;text-align:right;border-bottom:1px solid var(--ln);white-space:nowrap}#scr td.co,#scr th:first-child{text-align:left;font-weight:700;position:sticky;left:0;background:var(--p)}
-#scr tr:hover td{background:var(--ch)}#scr th{color:var(--ac)}#scr .bar button:hover{background:var(--ch)}#scr tbody tr:nth-child(even){background:var(--p2)}#scr tbody tr:nth-child(even) td.co{background:var(--p2)}#scr tbody tr:hover td.co{background:var(--ch)}#scr .u{color:var(--ok)}#scr .d{color:var(--bad)}#scr .ft{padding:14px 0;color:var(--mu);font-size:11.5px;text-align:center}
-@media(max-width:700px){#scr .sst{grid-template-columns:repeat(2,1fr)}}
+#scr .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px}#scr .fr{display:inline-flex;gap:4px}#scr .fr input{width:70px;min-width:60px}
+#scr button,#scr select,#scr input{background:var(--p);color:var(--tx);border:1px solid var(--ln);border-radius:6px;padding:5px 9px;font:inherit;min-height:36px}
+#scr button{cursor:pointer}#scr button:hover{border-color:var(--ac)}#scr input[type=checkbox]{padding:0;min-height:auto;width:18px;height:18px}
+#scr .bar button{border-radius:14px}#scr details{position:relative}
+#scr #scp{position:absolute;z-index:5;background:var(--p);border:1px solid var(--ln);border-radius:8px;padding:8px;max-height:300px;overflow:auto;width:260px;max-width:90vw}
+#scr #scp label{display:block;padding:2px 0;cursor:pointer}
+#scr .tw{overflow-x:auto;overflow-y:auto;max-height:68vh;border:1px solid var(--ln);border-radius:10px;background:var(--p);-webkit-overflow-scrolling:touch}
+#scr table{border-collapse:collapse;width:100%;min-width:600px}
+#scr th{position:sticky;top:0;background:var(--p);cursor:pointer;text-align:right;white-space:nowrap;padding:7px 10px;border-bottom:2px solid var(--ac);font-size:11px;text-transform:uppercase}
+#scr td{padding:5px 10px;text-align:right;border-bottom:1px solid var(--ln);white-space:nowrap}
+#scr td.co,#scr th:first-child{text-align:left;font-weight:700;position:sticky;left:0;background:var(--p);z-index:2}
+#scr tr:hover td{background:var(--ch)}#scr th{color:var(--ac)}#scr .bar button:hover{background:var(--ch)}
+#scr tbody tr:nth-child(even){background:var(--p2)}#scr tbody tr:nth-child(even) td.co{background:var(--p2)}
+#scr tbody tr:hover td.co{background:var(--ch)}#scr .u{color:var(--ok)}#scr .d{color:var(--bad)}
+#scr .ft{padding:14px 0;color:var(--mu);font-size:11.5px;text-align:center;line-height:1.6}
+@media(max-width:700px){
+  #scr .sst{grid-template-columns:repeat(2,1fr)}
+  #scr{padding:10px 12px}
+  #scr .bar{gap:6px}
+  #scr .fr input{width:60px;min-width:50px}
+  #scr button,#scr select,#scr input[type=text],#scr input[type=number]{font-size:14px;padding:6px 8px}
+  .vtabs{padding:8px 12px 0;gap:6px}
+  .vtabs button{padding:8px 14px;font-size:13px}
+  .vtabs button:first-child{font-size:14px;padding:9px 16px}
+}
+@media(max-width:480px){
+  #scr .sst{grid-template-columns:repeat(2,1fr);gap:6px}
+  #scr .sst b{font-size:18px}
+  #scr #scp{width:220px}
+}
 </style>
-<section id="scr" hidden><div class="mu" id="sdt" style="color:var(--mu);margin-bottom:8px"></div><div class="sst" id="sst"></div><div class="bar" id="spre"></div>
-<div class="bar"><input id="sq" placeholder="Search company / symbol"><button id="sadd">+ Add filter</button><span id="sfl"></span><button id="sclr">Clear</button><details><summary>Columns</summary><div id="scp"></div></details><button id="scsv">Export CSV</button></div>
-<div class="tw"><table><thead id="sth"></thead><tbody id="stb"></tbody></table></div>
+<section id="scr" hidden aria-label="Stock screener"><div class="mu" id="sdt" style="color:var(--mu);margin-bottom:8px"></div><div class="sst" id="sst" role="region" aria-label="Market summary"></div><div class="bar" id="spre" role="group" aria-label="Quick views"></div>
+<div class="bar" role="search"><label for="sq" class="sr-only">Search company or symbol</label><input id="sq" placeholder="Search company / symbol" aria-label="Search company or symbol"><button id="sadd" aria-label="Add numeric filter">+ Add filter</button><span id="sfl"></span><button id="sclr" aria-label="Clear all screener filters">Clear</button><details><summary aria-label="Show or hide column picker">Columns</summary><div id="scp" role="group" aria-label="Toggle columns"></div></details><button id="scsv" aria-label="Export current view as CSV">Export CSV</button></div>
+<div class="tw" role="region" aria-label="Stock data table"><table aria-label="NEPSE stock screener data"><thead id="sth"></thead><tbody id="stb"></tbody></table></div>
 <div class="ft">Data: Smart Wealth Pro stock-screener export, <span id="sdt2"></span>. For information and education only - not investment advice and not a recommendation to buy or sell. Verify with official NEPSE / company disclosures.</div></section>
 <script>(function(){const D=__SDATA__,C=D.cols,ix=n=>C.indexOf(n),$=s=>document.querySelector('#scr '+s),num=v=>typeof v==='number';
 const nav=document.createElement('nav');nav.className='vtabs';nav.innerHTML='<button class="on" data-v="n">NEWS PORTAL<em>LATEST</em></button><button data-v="s">STOCK SCREENER</button>';
@@ -2355,7 +2422,18 @@ def main(argv=None):
 # --------------------------------------------------------------------------------------
 DASHBOARD_HTML = r"""<!doctype html>
 <html lang="en" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>BINJAL HALWAI NEWSPORTAL</title>
+<title>Binjal Halwai NewsPortal — Nepal Stock Market News (NEPSE)</title>
+<meta name="description" content="Nepal stock market news aggregator — NEPSE, SEBON, IPO, dividend, banking and financial news from top Nepali publishers in one place.">
+<link rel="canonical" href="https://binjalhalwai.github.io/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://binjalhalwai.github.io/">
+<meta property="og:title" content="Binjal Halwai NewsPortal — Nepal Stock Market News (NEPSE)">
+<meta property="og:description" content="Nepal stock market news aggregator — NEPSE, SEBON, IPO, dividend, banking and financial news from top Nepali publishers in one place.">
+<meta property="og:site_name" content="Binjal Halwai NewsPortal">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Binjal Halwai NewsPortal — Nepal Stock Market News (NEPSE)">
+<meta name="twitter:description" content="Nepal stock market news aggregator — NEPSE, SEBON, IPO, dividend, banking and financial news from top Nepali publishers.">
+<meta name="robots" content="index,follow">
 <style>
 :root{--bg:#14170b;--p:#1f2412;--p2:#232914;--ln:rgba(238,241,220,.12);--tx:#ffffff;--mu:#dfe5c8;--ac:#a3b565;--ach:#b8c97c;--ac2:#b8c97c;--lk:#b8c97c;--hi:#ff7a5c;--md:#38bdf8;--lo:#838b68;--ok:#4ade80;--wa:#f5c542;--bad:#fb7185;--ch:#2a3116;--gA:#b8c97c;--gB:#a3b565;--onac:#14170b;--hd1:#1a1e0f;--hd2:#1a1e0f;--hdtx:#ffffff;--hdmu:#dfe5c8;--hdln:rgba(238,241,220,.28);--hdbg:rgba(238,241,220,.06);--s2:#4ade80;--s3:#b8c97c;--s4:#8b9470;--s5:#fb7185;--s6:#a3b565;--s7:#7fb59a}
 [data-theme=light]{--bg:#f7f8ee;--p:#ffffff;--p2:#fafbf2;--ln:rgba(77,91,42,.18);--tx:#000000;--mu:#3d4526;--ac:#4d5b2a;--ach:#3d4922;--ac2:#65772f;--lk:#65772f;--hi:#d9381e;--md:#0369a1;--lo:#8b9470;--wa:#8a5a00;--ok:#16a34a;--bad:#e11d48;--ch:#e7ebd2;--gA:#65772f;--gB:#4d5b2a;--onac:#ffffff;--hd1:#f1f3e0;--hd2:#f1f3e0;--hdtx:#000000;--hdmu:#3d4526;--hdln:rgba(77,91,42,.35);--hdbg:#ffffff;--s2:#16a34a;--s3:#65772f;--s4:#a3b565;--s5:#e11d48;--s6:#8b9470;--s7:#4d8f6b}
@@ -2449,36 +2527,38 @@ body{background:radial-gradient(1200px 420px at 85% -120px,color-mix(in srgb,var
 .panel,.tw{border-radius:10px;box-shadow:0 2px 10px color-mix(in srgb,var(--gB) 10%,transparent)}
 .feed.cards .art{border-radius:10px;border:1px solid var(--ln);border-top:3px solid var(--ac);box-shadow:0 2px 10px rgba(0,0,0,.14)}
 ::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:var(--ln);border-radius:6px}::-webkit-scrollbar-thumb:hover{background:var(--ac)}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .disc{margin:24px 0 0;padding:16px 20px;border-top:3px solid var(--ac);background:var(--p);color:var(--mu);font-size:12px;text-align:center;line-height:1.6}
 @media(max-width:860px){.top{padding:8px 12px}}
 </style></head><body>
+<a href="#maincontent" class="sr-only" style="position:absolute;top:4px;left:4px;z-index:100;background:var(--ac);color:var(--onac);padding:6px 12px;border-radius:4px;text-decoration:none">Skip to main content</a>
 <div id="snap" class="snap" hidden></div>
-<header class="top">
- <div class="brand"><span class="logo mono">BH</span><div><b>BINJAL HALWAI <span>NEWSPORTAL</span></b><small>NEPSE News Hub — Nepal Stock Market News, All in One Place</small></div></div>
- <div class="search"><input id="q" type="search" placeholder="Search headlines, companies, keywords…  ( / )  e.g. NABIL, dividend, हकप्रद" aria-label="Search"></div>
+<header class="top" role="banner">
+ <div class="brand"><span class="logo mono" aria-hidden="true">BH</span><div><b>BINJAL HALWAI <span>NEWSPORTAL</span></b><small>NEPSE News Hub — Nepal Stock Market News, All in One Place</small></div></div>
+ <div class="search" role="search"><input id="q" type="search" placeholder="Search headlines, companies, keywords…  ( / )  e.g. NABIL, dividend, हकप्रद" aria-label="Search news headlines, companies and keywords"></div>
  <div class="hr">
-  <div class="clk"><span id="clock" class="mono"></span><small>Nepal Standard Time (UTC+05:45)</small></div>
+  <div class="clk"><span id="clock" class="mono" aria-live="off"></span><small>Nepal Standard Time (UTC+05:45)</small></div>
   <div class="clk"><span id="lastUpd">—</span><small>Last successful collection</small></div>
-  <button id="bRef" class="btn">⟳ Refresh</button>
-  <button id="bHealth" class="ic" title="Source health"><span id="hDot" class="dot"></span><span id="hTxt"></span></button>
-  <button id="bTheme" class="ic" title="Light/dark theme">◐</button>
-  <button id="bSet" class="ic" title="Settings">⚙</button>
+  <button id="bRef" class="btn" aria-label="Refresh news now">⟳ Refresh</button>
+  <button id="bHealth" class="ic" title="Source health" aria-label="Source health status"><span id="hDot" class="dot" aria-hidden="true"></span><span id="hTxt"></span></button>
+  <button id="bTheme" class="ic" title="Toggle light/dark theme" aria-label="Toggle light and dark theme">◐</button>
+  <button id="bSet" class="ic" title="Settings" aria-label="Open settings">⚙</button>
  </div>
 </header>
-<section class="stats" id="stats"></section>
-<div class="lay"><nav class="side" id="side" aria-label="Navigation"></nav>
-<main>
+<section class="stats" id="stats" aria-label="News statistics"></section>
+<div class="lay"><nav class="side" id="side" aria-label="News categories and navigation"></nav>
+<main id="maincontent" aria-label="News feed">
  <div id="vFeed">
   <div class="flt">
-   <label>Date<select id="fPreset"><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="24h">Last 24h</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option><option value="all">All time</option><option value="custom">Custom range…</option></select></label>
-   <span id="cDates" hidden><input type="date" id="fFrom" aria-label="From"> – <input type="date" id="fTo" aria-label="To"></span>
-   <label>Source<select id="fSource"></select></label>
-   <label>Language<select id="fLang"><option value="">All</option><option value="en">English</option><option value="ne">नेपाली</option></select></label>
-   <label>Mode<select id="fMode"><option value="">Default</option><option value="strict">Strict NEPSE-only</option><option value="financial">NEPSE + financial</option><option value="broad">Broad business</option></select></label>
-   <label>Relevance<select id="fRel"><option value="">By mode</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option><option value="all">All (incl. low)</option><option value="excluded">Excluded (audit)</option></select></label>
-   <label>Sort<select id="fSort"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label>
-   <label>Per page<select id="fPer"><option>25</option><option>50</option><option>100</option><option>200</option></select></label>
-   <div class="seg"><button id="vC">List</button><button id="vK">Cards</button></div>
+   <label>Date<select id="fPreset" aria-label="Filter by date range"><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="24h">Last 24h</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option><option value="all">All time</option><option value="custom">Custom range…</option></select></label>
+   <span id="cDates" hidden><input type="date" id="fFrom" aria-label="From date"> – <input type="date" id="fTo" aria-label="To date"></span>
+   <label>Source<select id="fSource" aria-label="Filter by source"></select></label>
+   <label>Language<select id="fLang" aria-label="Filter by language"><option value="">All</option><option value="en">English</option><option value="ne">नेपाली</option></select></label>
+   <label>Mode<select id="fMode" aria-label="Filter mode"><option value="">Default</option><option value="strict">Strict NEPSE-only</option><option value="financial">NEPSE + financial</option><option value="broad">Broad business</option></select></label>
+   <label>Relevance<select id="fRel" aria-label="Filter by relevance"><option value="">By mode</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option><option value="all">All (incl. low)</option><option value="excluded">Excluded (audit)</option></select></label>
+   <label>Sort<select id="fSort" aria-label="Sort order"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label>
+   <label>Per page<select id="fPer" aria-label="Articles per page"><option>25</option><option>50</option><option>100</option><option>200</option></select></label>
+   <div class="seg" role="group" aria-label="Article view style"><button id="vC" aria-pressed="true">List</button><button id="vK" aria-pressed="false">Cards</button></div>
    <button class="btn gh" id="bClear">Clear filters</button>
    <details class="menu" id="xm"><summary class="btn gh">Export ▾</summary><div>
     <button data-x="csv">Filtered articles → CSV</button><button data-x="xlsx">Filtered articles → Excel (.xlsx)</button>
@@ -2492,7 +2572,7 @@ body{background:radial-gradient(1200px 420px at 85% -120px,color-mix(in srgb,var
 </main></div>
 <dialog id="dlg"><form method="dialog" id="dlgF"></form></dialog>
 <div id="toast" aria-live="polite"></div>
-<footer id="disc" class="disc" hidden></footer>
+<footer id="disc" class="disc" hidden role="contentinfo"></footer>
 <script>/*__SNAPSHOT__*/</script>
 <script>
 (function(){'use strict';
@@ -3052,7 +3132,7 @@ DASHBOARD_HTML = (DASHBOARD_HTML.replace("</style></head>", _EXT_CSS + "</style>
 #      Nepse Alpha), so that their stories still join the repeated-story and priority logic.
 # Nothing here bypasses any site's terms: sources with permitted=false are still never fetched automatically.
 # ======================================================================================
-VERSION = "1.2.0"
+VERSION = "1.2.1"  # Phase-1: SEO/a11y, mobile screener, Nepali NFC, source registry
 PRIORITY_RANK = {   # your order: 1 = searched first
     "sharesansar": 1, "merolagani": 2, "nepalipaisa": 3, "nepsealpha": 4, "arthasansar": 5, "bizpati": 6,
     "bajarkochirfar": 7, "eng_bajarkochirfar": 7, "aarthiknews": 8, "abhiyandaily": 10,
