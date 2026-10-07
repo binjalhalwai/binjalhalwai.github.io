@@ -855,6 +855,36 @@ def purge(settings):
     log.info("Retention purge complete")
 
 
+def housekeeping(settings):
+    """Used by the command-line 'collect' (GitHub Actions), where the web scheduler never runs.
+    1) delete old rows with purge()   2) shrink the database file when it holds a lot of free space.
+    NNH_RETENTION_DAYS (7 or more) overrides retention_days for this run only; settings.json is untouched."""
+    s = dict(settings)
+    raw = os.getenv("NNH_RETENTION_DAYS", "").strip()
+    if raw.isdigit() and int(raw) >= 7:
+        s["retention_days"] = int(raw)
+    with db() as c:
+        before = c.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
+    purge(s)
+    with db() as c:
+        after = c.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
+    compacted = False
+    c = connect()
+    try:
+        pages = c.execute("PRAGMA page_count").fetchone()[0]
+        free = c.execute("PRAGMA freelist_count").fetchone()[0]
+        if pages and free / pages > 0.20:        # more than 20% of the file is empty space
+            c.isolation_level = None             # autocommit: VACUUM cannot run inside a transaction
+            c.execute("VACUUM")
+            c.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            compacted = True
+    finally:
+        c.close()
+    return {"before": before, "after": after, "removed": before - after,
+            "retention_days": int(s["retention_days"]),
+            "excluded_days": int(s["excluded_retention_days"]), "compacted": compacted}
+
+
 # --------------------------------------------------------------------------------------
 # Config store (JSON files are the editable source of truth)
 # --------------------------------------------------------------------------------------
@@ -2758,6 +2788,13 @@ def cmd_serve(args):
 def cmd_collect(args):
     store = Store(CFG.data_dir)
     init_db()
+    try:                                          # housekeeping must never stop a collection run
+        hk = housekeeping(store.settings())
+        print(f"Housekeeping: {hk['after']:,} articles kept, {hk['removed']:,} removed "
+              f"(keep {hk['retention_days']} days; excluded items {hk['excluded_days']} days)"
+              f"{' - database compacted' if hk['compacted'] else ''}")
+    except Exception as exc:
+        print(f"Housekeeping skipped: {exc}")
     engine = Engine(store)
     only = set(args.source) if args.source else None
     totals = engine.run(trigger="cli", only=only, force=args.force, rediscover=args.rediscover)
