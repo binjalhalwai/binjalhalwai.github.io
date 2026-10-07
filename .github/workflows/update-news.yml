@@ -37,7 +37,9 @@ permissions:
 
 concurrency:
   group: newsportal
-  cancel-in-progress: false
+  # true = a newer run cancels a stuck/older one, so one stuck deploy can never block every later run
+  # (each run rebuilds the whole site, so cancelling an old run loses nothing)
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -74,6 +76,9 @@ jobs:
           # (ETag / If-Modified-Since) where the site supports it.
           NNH_MIN_INTERVAL_MIN: "12"
           NNH_CONTACT: ${{ secrets.NNH_CONTACT }}
+          # Delete articles older than this many days (minimum 7).  Excluded/irrelevant items are always
+          # deleted after 7 days.  Keeps the database (and the 10 GB cache budget) from growing forever.
+          NNH_RETENTION_DAYS: "90"
 
       # Headlines you typed into manual_headlines.txt (portals that do not allow automated access)
       - name: Add manual headlines
@@ -94,6 +99,28 @@ jobs:
 
       - name: Check the page is not empty
         run: test "$(wc -c < public_site/index.html)" -gt 20000
+
+      # Shows on the run's summary page: how much space the site and the database use
+      - name: Storage report
+        if: always()
+        run: |
+          {
+            echo "### Storage report"
+            echo "- Published site folder: $(du -sh public_site 2>/dev/null | cut -f1)  (GitHub Pages limit: 1 GB)"
+            echo "- index.html: $(du -h public_site/index.html 2>/dev/null | cut -f1)"
+            echo "- News database files: $(du -ch data/nepse_news.db* 2>/dev/null | tail -1 | cut -f1)  (cache limit: 10 GB for the whole repo)"
+          } >> "$GITHUB_STEP_SUMMARY"
+          python - >> "$GITHUB_STEP_SUMMARY" <<'PY' || true
+          import sqlite3
+          c = sqlite3.connect("data/nepse_news.db")
+          n, old, new = c.execute("SELECT COUNT(*), MIN(sort_at), MAX(sort_at) FROM articles").fetchone()
+          ex = c.execute("SELECT COUNT(*) FROM articles WHERE relevance='excluded'").fetchone()[0]
+          seen = c.execute("SELECT COUNT(*) FROM seen").fetchone()[0]
+          pages = c.execute("PRAGMA page_count").fetchone()[0]
+          free = c.execute("PRAGMA freelist_count").fetchone()[0]
+          print(f"- Articles in database: {n:,} ({ex:,} excluded) - oldest {(old or '-')[:10]}, newest {(new or '-')[:10]}")
+          print(f"- Seen-URL table: {seen:,} rows - empty space inside the file: {free * 100 // max(pages, 1)}%")
+          PY
 
       # Shows on the run's summary page: when it was built and what collection did
       - name: Run summary
