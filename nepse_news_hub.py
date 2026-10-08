@@ -2382,6 +2382,10 @@ def build_snapshot(p: dict, settings: dict) -> str:
                   "sources_enabled": len(srcs), "sources_manual": 0, "sources_error": 0, "sources_unverified": 0,
                   "last_success": iso(utcnow()), "mode_label": "snapshot"},
         "sources": [{"id": i, "name": n} for i, n in srcs], "articles": arts}
+    try:
+        payload["stories"] = snapshot_stories(not full)       # v1.3 Related Coverage
+    except Exception:
+        log.exception("snapshot stories failed")
     js = "window.__SNAPSHOT__ = " + json.dumps(payload, ensure_ascii=False).replace("</", "<\\/") + ";"
     return inject_screener(DASHBOARD_HTML.replace("/*__SNAPSHOT__*/", js))
 
@@ -4058,6 +4062,7 @@ def create_app(store, engine, sched=None):
             row = c.execute("SELECT id, relevance FROM articles WHERE canonical_url=?",
                             (canonical_url(url),)).fetchone()
         _hot_cache.clear()
+        _story_cache.clear()
         _cover["t"] = 0.0
         return {"added": bool(new), "duplicate": not new, "id": row["id"] if row else None,
                 "relevance": row["relevance"] if row else None}
@@ -4101,6 +4106,7 @@ def create_app(store, engine, sched=None):
         with db() as c:
             new, _ = ingest(c, arts, src, clf, settings)
         _hot_cache.clear()
+        _story_cache.clear()
         _cover["t"] = 0.0
         return {"added": new, "duplicates": len(arts) - new, "skipped": skipped}
 
@@ -4233,6 +4239,247 @@ def cmd_selftest(_args=None) -> int:
 
 DASHBOARD_HTML = (DASHBOARD_HTML.replace("</style></head>", _EXT_CSS_V12 + "</style></head>", 1)
                   .replace("</body></html>", _EXT_JS_V12 + "</body></html>", 1))
+
+
+# ======================================================================================
+# v1.3 RELATED COVERAGE ("story clustering", 8 Oct 2026)
+#   One card per story and per NPT day: how many publishers reported it, first report / latest update, and every
+#   publisher's own headline with a link back to the original. It re-uses the repeated-story matcher (_cluster)
+#   unchanged, so nothing is merged that the hub did not already treat as the same story.
+#   Works in the live hub (/api/stories) AND in the static public snapshot (stories are embedded at build time).
+#   Public snapshot: headlines, sources, times and links only; never AI text or excerpts.
+# ======================================================================================
+VERSION = "1.3.0"  # Related Coverage (story clusters) in live hub and public snapshot
+_story_cache = {}
+STORY_DAYS = 7          # how many NPT days are embedded in the public snapshot
+STORY_MAX_MEMBERS = 20  # headlines listed per story
+
+
+def _npt_day_bounds(day):
+    lo = datetime(day.year, day.month, day.day, tzinfo=NPT)
+    return iso(lo), iso(lo + timedelta(days=1))
+
+
+def _build_stories(rows, public=True, min_sources=2):
+    """rows: article rows of ONE NPT day. Returns story dicts, best stories first."""
+    rk, prio = rank_map(), priority_ids()
+    out = []
+    for g in _cluster(rows):
+        mem = sorted((rows[i] for i in g), key=lambda r: r["sort_at"])
+        srcs = {r["source_id"] for r in mem}
+        if len(srcs) < max(2, min_sources):
+            continue
+        ranked = [r for r in mem if r["source_id"] in rk]
+        rep = min(ranked, key=lambda r: rk[r["source_id"]]) if ranked else mem[0]
+        cat = Counter(r["primary_category"] for r in mem if r["primary_category"]).most_common(1)
+        topic = CATEGORIES.get(cat[0][0], cat[0][0]) if cat else ""
+        n_prio = sum(1 for s in srcs if s in prio)
+        high = any(r["relevance"] == "high" for r in mem)
+        n = len(srcs)
+        ai = ""
+        if not public:
+            ai = next((r["summary_ai"] for r in [rep, *mem] if r["summary_ai"]), "") or ""
+        out.append({
+            "id": mem[0]["id"], "title": rep["title"], "url": rep["url"], "source_name": rep["source_name"],
+            "topic": topic, "n_sources": n, "n_articles": len(mem),
+            "first_at": mem[0]["sort_at"], "last_at": mem[-1]["sort_at"],
+            "first_source": mem[0]["source_name"], "last_source": mem[-1]["source_name"],
+            "heat": 3 if n >= 6 else 2 if n >= 4 else 1 if n >= 3 else 0,
+            "score": round(n + 0.6 * n_prio + (1.0 if high else 0.0)
+                           + (1.5 if topic in _MARKET_LABELS else 0.0), 2),
+            "summary": ai[:600],
+            "members": [{"source_id": r["source_id"], "source_name": r["source_name"], "title": r["title"],
+                         "url": r["url"], "at": r["sort_at"], "priority": r["source_id"] in prio}
+                        for r in mem][:STORY_MAX_MEMBERS]})
+    out.sort(key=lambda s: s["last_at"], reverse=True)
+    out.sort(key=lambda s: (s["score"], s["n_articles"]), reverse=True)   # stable: ties keep newest first
+    return out
+
+
+def stories_for_day(day, min_sources=2, public=True):
+    st = STORE_REF.settings() if STORE_REF else DEFAULT_SETTINGS
+    tiers = ["high"] if st["mode"] == "strict" else ["high", "medium"]
+    key = (day.isoformat(), int(min_sources), bool(public), tuple(tiers))
+    ent = _story_cache.get(key)
+    if ent and time.time() - ent[0] < 60:
+        return ent[1]
+    lo, hi = _npt_day_bounds(day)
+    with db() as c:
+        rows = c.execute("SELECT id,title,url,source_id,source_name,published_at,sort_at,relevance,primary_category,"
+                         "summary_ai FROM articles WHERE relevance IN (" + ",".join("?" * len(tiers)) + ") "
+                         "AND sort_at>=? AND sort_at<? ORDER BY sort_at DESC LIMIT 4000", [*tiers, lo, hi]).fetchall()
+    res = _build_stories(rows, public, min_sources)
+    _story_cache[key] = (time.time(), res)
+    return res
+
+
+def snapshot_stories(public=True):
+    """Embedded in the static snapshot: the last STORY_DAYS NPT days, stories reported by >= 2 publishers."""
+    today = datetime.now(NPT).date()
+    days = {}
+    for k in range(STORY_DAYS):
+        d = today - timedelta(days=k)
+        try:
+            days[d.isoformat()] = stories_for_day(d, 2, public)
+        except Exception:
+            log.exception("stories for %s failed", d)
+            days[d.isoformat()] = []
+    return {"today": today.isoformat(), "days": days}
+
+
+_orig_create_app_v13 = create_app
+
+
+def create_app(store, engine, sched=None):
+    app = _orig_create_app_v13(store, engine, sched)
+
+    @app.get("/api/stories")
+    def api_stories(date: str = "", min_sources: int = 2, limit: int = 60):
+        try:
+            day = datetime.strptime(date, "%Y-%m-%d").date() if date else datetime.now(NPT).date()
+        except ValueError:
+            raise HTTPException(400, "date must be YYYY-MM-DD")
+        if day > datetime.now(NPT).date() or day < datetime.now(NPT).date() - timedelta(days=366):
+            raise HTTPException(400, "date out of range")
+        ms, limit = max(2, min(10, min_sources)), max(1, min(100, limit))
+        return {"date": day.isoformat(), "today": datetime.now(NPT).date().isoformat(), "min_sources": ms,
+                "stories": stories_for_day(day, ms, False)[:limit]}
+
+    return app
+
+
+_EXT_CSS_V13 = """
+#stBar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 10px}
+#vStories .sf{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 8px}
+#vStories .sf select,#vStories .sf input{background:var(--p);border:1px solid var(--ln);border-radius:5px;padding:4px 8px}
+#vStories .sn0{font-size:12px;color:var(--mu);margin:0 0 10px}
+.story{border:1px solid var(--ln);border-radius:8px;background:var(--p);margin:0 0 10px;padding:10px 12px}
+.story.h1{border-left:3px solid var(--hi)}.story.h2,.story.h3{border-left:4px solid var(--hi);background:linear-gradient(90deg,rgba(255,122,69,.16),transparent 55%)}
+.story .sh{display:grid;grid-template-columns:54px 1fr;gap:8px;align-items:start}
+.story .cn{font-family:Consolas,monospace;font-weight:700;color:var(--hi);font-size:15px;line-height:1.2}
+.story .cn small{display:block;font-size:10px;font-weight:600;color:var(--mu)}
+.story h3{margin:0;font-size:15px;line-height:1.35}
+.story .sm{display:flex;gap:6px 12px;flex-wrap:wrap;font-size:11.5px;color:var(--mu);margin-top:4px;align-items:center}
+.story .tp{border:1px solid var(--ln);border-radius:10px;padding:0 8px;background:var(--ch);color:var(--tx)}
+.story .ai{margin:8px 0 0;font-size:12.5px}.story .ai b{font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--ac)}
+.story ul{list-style:none;margin:8px 0 0;padding:0;border-top:1px solid var(--ln)}
+.story li{display:grid;grid-template-columns:128px 1fr 54px;gap:8px;padding:5px 0;border-bottom:1px dashed var(--ln);font-size:12.5px}
+.story li:last-child{border-bottom:0}
+.story li .sc{font-weight:700;color:var(--ac)}.story li .tm{text-align:right;color:var(--mu);font-variant-numeric:tabular-nums}
+@media(max-width:640px){.story li{grid-template-columns:1fr 46px}.story li .sc{grid-column:1/-1}.story .sh{grid-template-columns:44px 1fr}}
+"""
+
+_EXT_JS_V13 = r"""<script>
+(function(){'use strict';
+const SNAP=window.__SNAPSHOT__||null,$=(s,r)=>(r||document).querySelector(s);
+const main=$('#maincontent'),vf=$('#vFeed');if(!main||!vf)return;
+const TZ='Asia/Kathmandu',okUrl=u=>/^https?:\/\//i.test(u||'')?u:'#';
+function el(t,c,x){const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e}
+const fT=new Intl.DateTimeFormat('en-GB',{timeZone:TZ,hour:'2-digit',minute:'2-digit',hour12:false});
+const fD=new Intl.DateTimeFormat('en-GB',{timeZone:TZ,day:'numeric',month:'short',year:'numeric'});
+const fY=new Intl.DateTimeFormat('en-CA',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit'});
+const tm=s=>{const d=new Date(s);return isNaN(d)?'':fT.format(d)};
+const ymd=d=>fY.format(d);
+const flames=n=>n>=6?'🔥🔥🔥 ':n>=4?'🔥🔥 ':n>=3?'🔥 ':'';
+const todayStr=()=>(SNAP&&SNAP.stories&&SNAP.stories.today)||ymd(new Date());
+const dayLabel=s=>{const t=todayStr();if(s===t)return 'Today';const y=ymd(new Date(new Date(t+'T12:00:00+05:45').getTime()-864e5));return s===y?'Yesterday':''};
+const nice=s=>fD.format(new Date(s+'T12:00:00+05:45'));
+const ST={on:false,day:todayStr(),min:2};
+/* toggle bar + view */
+const bar=el('div');bar.id='stBar';
+const seg=el('div','seg');seg.setAttribute('role','group');seg.setAttribute('aria-label','News view');
+const bA=el('button','on','All articles'),bB=el('button',null,'Related coverage');bA.setAttribute('aria-pressed','true');bB.setAttribute('aria-pressed','false');
+bB.title='Same story reported by several publishers, grouped into one card';
+seg.append(bA,bB);bar.append(seg);
+const view=el('section');view.id='vStories';view.hidden=true;view.setAttribute('aria-label','Related coverage');
+const sf=el('div','sf'),selD=el('select'),selM=el('select'),note=el('div','sn0'),list=el('div');
+selD.setAttribute('aria-label','Day');selM.setAttribute('aria-label','Minimum publishers');
+['2','3','4','5'].forEach(v=>{const o=el('option','','≥ '+v+' publishers');o.value=v;selM.append(o)});
+let dateIn=null;
+if(!SNAP){dateIn=el('input');dateIn.type='date';dateIn.setAttribute('aria-label','Pick a date');dateIn.max=todayStr()}
+function fillDays(){selD.replaceChildren();const t=todayStr();
+  const keys=SNAP&&SNAP.stories?Object.keys(SNAP.stories.days).sort().reverse():Array.from({length:7},(_,k)=>ymd(new Date(new Date(t+'T12:00:00+05:45').getTime()-k*864e5)));
+  keys.forEach(k=>{const o=el('option','',(dayLabel(k)?dayLabel(k)+' · ':'')+nice(k));o.value=k;selD.append(o)});
+  if(!keys.includes(ST.day)){const o=el('option','',nice(ST.day));o.value=ST.day;selD.prepend(o)}selD.value=ST.day}
+sf.append(el('span',null,'Day'),selD);if(dateIn)sf.append(dateIn);sf.append(selM);
+view.append(sf,note,list);main.prepend(view);main.prepend(bar);
+function card(s){
+  const a=el('article','story'+(s.heat?' h'+s.heat:''));
+  const hd=el('div','sh'),cn=el('div','cn',flames(s.n_sources).trim()+' ×'+s.n_sources),sm=el('small',null,'publishers');cn.append(sm);
+  const body=el('div'),h3=el('h3'),l=el('a',null,s.title);l.href=okUrl(s.url);l.target='_blank';l.rel='noopener';h3.append(l);
+  const meta=el('div','sm');if(s.topic)meta.append(el('span','tp',s.topic));
+  meta.append(el('span',null,nice(ST.day)),el('span',null,s.n_sources+' sources · '+s.n_articles+' reports'),
+    el('span',null,'First reported '+tm(s.first_at)+' NPT ('+s.first_source+')'),el('span',null,'Latest update '+tm(s.last_at)+' NPT'));
+  body.append(h3,meta);hd.append(cn,body);a.append(hd);
+  if(s.summary){const p=el('p','ai');p.append(el('b',null,'AI summary '),document.createTextNode(s.summary));a.append(p)}
+  const ul=el('ul');
+  s.members.forEach(m=>{const li=el('li'),sc=el('span','sc',(m.priority?'★ ':'')+m.source_name),h=el('a',null,m.title);
+    h.href=okUrl(m.url);h.target='_blank';h.rel='noopener';li.append(sc,h,el('span','tm',tm(m.at)));ul.append(li)});
+  a.append(ul);
+  if(s.n_articles>s.members.length)a.append(el('div','sn0','+ '+(s.n_articles-s.members.length)+' more reports not listed'));
+  return a}
+function paint(stories){
+  const n=stories.filter(s=>s.n_sources>=ST.min);
+  note.textContent=n.length?n.length+' stor'+(n.length===1?'y':'ies')+' reported by ≥ '+ST.min+' publishers on '+nice(ST.day)+'. Times are NPT. Each headline is the publisher’s own and links to the original.':'';
+  if(!n.length){list.replaceChildren(el('div','empty','No story was reported by ≥ '+ST.min+' publishers on '+nice(ST.day)+(SNAP?' (snapshot covers the last 7 days).':' yet.')));return}
+  list.replaceChildren(...n.map(card))}
+async function load(){
+  fillDays();selM.value=String(ST.min);if(dateIn)dateIn.value=ST.day;
+  if(SNAP){const d=(SNAP.stories&&SNAP.stories.days&&SNAP.stories.days[ST.day])||[];paint(d);return}
+  try{const r=await fetch('/api/stories?date='+encodeURIComponent(ST.day)+'&min_sources='+ST.min+'&limit=60',{headers:{Accept:'application/json'}});
+    if(!r.ok)throw new Error('HTTP '+r.status);paint((await r.json()).stories||[])}
+  catch(e){list.replaceChildren(el('div','empty','Related coverage unavailable: '+e.message))}}
+function setOn(on){ST.on=on;bA.classList.toggle('on',!on);bB.classList.toggle('on',on);bA.setAttribute('aria-pressed',String(!on));bB.setAttribute('aria-pressed',String(on));
+  view.hidden=!on;vf.hidden=on;if(on)load()}
+bA.onclick=()=>{if(ST.on){setOn(false)}};bB.onclick=()=>setOn(true);
+selD.onchange=()=>{ST.day=selD.value;load()};selM.onchange=()=>{ST.min=+selM.value;load()};
+if(dateIn)dateIn.onchange=()=>{if(dateIn.value&&dateIn.value<=todayStr()){ST.day=dateIn.value;load()}};
+/* leaving the feed (sidebar: categories, Source Directory, Settings) closes this view */
+const side=$('#side');
+if(side)side.addEventListener('click',()=>{if(!ST.on)return;view.hidden=true;ST.on=false;bA.classList.add('on');bB.classList.remove('on');
+  bA.setAttribute('aria-pressed','true');bB.setAttribute('aria-pressed','false');const vs=$('#vSrc'),vt=$('#vSet');if(vs&&vt&&vs.hidden&&vt.hidden)vf.hidden=false});
+/* show the toggle only while the feed area is the active screen */
+function syncBar(){const vs=$('#vSrc'),vt=$('#vSet');bar.hidden=!!((vs&&!vs.hidden)||(vt&&!vt.hidden))}
+[$('#vSrc'),$('#vSet')].forEach(x=>{if(x)new MutationObserver(syncBar).observe(x,{attributes:true,attributeFilter:['hidden']})});
+if(!SNAP)setInterval(()=>{if(ST.on&&ST.day===todayStr()&&!document.hidden)load()},180000);
+})();
+</script>"""
+
+_orig_cmd_selftest_v13 = cmd_selftest
+
+
+def cmd_selftest(_args=None) -> int:
+    """Earlier tests + v1.3 Related Coverage tests."""
+    rc = _orig_cmd_selftest_v13(_args)
+    fails = 0
+
+    def check(ok, name):
+        nonlocal fails
+        print(f"[{'PASS' if ok else 'FAIL'}] {name}")
+        fails += 0 if ok else 1
+
+    def row(i, title, src, name, h=0):
+        return {"id": i, "title": title, "source_id": src, "source_name": name, "url": f"https://x.test/{i}",
+                "published_at": None, "relevance": "high", "primary_category": "dividend", "summary_ai": "AI TEXT",
+                "sort_at": iso(datetime(2026, 10, 8, 4, 0, tzinfo=UTC) + timedelta(hours=h))}
+
+    t = "Chilime Hydropower proposes 10 percent cash dividend for fiscal year 2082/83"
+    rows = [row(1, t, "a", "A"), row(2, t + " board decision", "b", "B", 1), row(3, t, "c", "C", 2),
+            row(4, "Nepal Rastra Bank monetary policy interest corridor announcement deposit rates", "d", "D", 1)]
+    st = _build_stories(rows, public=True)
+    check(len(st) == 1 and st[0]["n_sources"] == 3, "stories: 3 publishers join, unrelated headline stays out")
+    check(st[0]["summary"] == "" and _build_stories(rows, public=False)[0]["summary"] == "AI TEXT",
+          "stories: public build never carries AI text")
+    check(st[0]["first_source"] == "A" and st[0]["last_source"] == "C", "stories: first / latest source")
+    check(_build_stories(rows, public=True, min_sources=4) == [], "stories: min_sources filter")
+    one = [row(1, t, "a", "A"), row(2, t, "a", "A", 1)]
+    check(_build_stories(one) == [], "stories: one publisher is never a story")
+    print(f"\nv1.3: {'all passed' if not fails else str(fails) + ' FAILED'}")
+    return rc or (1 if fails else 0)
+
+
+DASHBOARD_HTML = (DASHBOARD_HTML.replace("</style></head>", _EXT_CSS_V13 + "</style></head>", 1)
+                  .replace("</body></html>", _EXT_JS_V13 + "</body></html>", 1))
 
 
 if __name__ == "__main__":
