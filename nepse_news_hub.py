@@ -855,36 +855,6 @@ def purge(settings):
     log.info("Retention purge complete")
 
 
-def housekeeping(settings):
-    """Used by the command-line 'collect' (GitHub Actions), where the web scheduler never runs.
-    1) delete old rows with purge()   2) shrink the database file when it holds a lot of free space.
-    NNH_RETENTION_DAYS (7 or more) overrides retention_days for this run only; settings.json is untouched."""
-    s = dict(settings)
-    raw = os.getenv("NNH_RETENTION_DAYS", "").strip()
-    if raw.isdigit() and int(raw) >= 7:
-        s["retention_days"] = int(raw)
-    with db() as c:
-        before = c.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
-    purge(s)
-    with db() as c:
-        after = c.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
-    compacted = False
-    c = connect()
-    try:
-        pages = c.execute("PRAGMA page_count").fetchone()[0]
-        free = c.execute("PRAGMA freelist_count").fetchone()[0]
-        if pages and free / pages > 0.20:        # more than 20% of the file is empty space
-            c.isolation_level = None             # autocommit: VACUUM cannot run inside a transaction
-            c.execute("VACUUM")
-            c.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-            compacted = True
-    finally:
-        c.close()
-    return {"before": before, "after": after, "removed": before - after,
-            "retention_days": int(s["retention_days"]),
-            "excluded_days": int(s["excluded_retention_days"]), "compacted": compacted}
-
-
 # --------------------------------------------------------------------------------------
 # Config store (JSON files are the editable source of truth)
 # --------------------------------------------------------------------------------------
@@ -1812,6 +1782,7 @@ SCREENER_BLOCK = r'''<style>
 #scr .rng{height:8px;border-radius:4px;background:var(--ch);position:relative;margin:8px 0 2px}
 #scr .rng i{position:absolute;top:-3px;width:4px;height:14px;background:var(--ac);border-radius:2px}
 #scr .cmp-t td:first-child,#scr .cmp-t th:first-child{min-width:120px}
+#scr .hh{margin:16px 0 6px;font-size:13px}
 @media(max-width:640px){#scr{padding:10px 8px}#scr .bar input{width:120px}#scr th,#scr td{padding:6px 7px}}
 </style>
 <section id="scr" hidden aria-label="Market Analytics">
@@ -1894,6 +1865,28 @@ SCREENER_BLOCK = r'''<style>
     <div class="tw" id="t-bnk"></div>
   </div>
 
+  <div id="v-hyd" class="subv" hidden>
+    <div class="bar"><input id="hyd-sq" placeholder="Search symbol" list="syms" aria-label="Search hydropower symbol"><label><input type="checkbox" id="hyd-loss" style="width:16px;height:16px;min-width:0;padding:0"> Hide loss-making</label></div>
+    <div class="sst" id="hyd-sst"></div>
+    <div class="note" id="hyd-note"></div>
+    <h3 class="hh">Hydropower score</h3>
+    <div class="note" id="hyd-snote"></div>
+    <div class="tw" id="t-hyd0"></div>
+    <h3 class="hh">Market &amp; valuation</h3>
+    <div class="tw" id="t-hyd1"></div>
+    <h3 class="hh">Profitability</h3>
+    <div class="tw" id="t-hyd2"></div>
+    <h3 class="hh">Leverage &amp; balance sheet</h3>
+    <div class="note">Liabilities include loans <em>and</em> payables/provisions. The export has no separate debt or finance-cost field, so these are leverage proxies, not Debt/Equity or interest cover.</div>
+    <div class="tw" id="t-hyd3"></div>
+    <h3 class="hh">Dividends</h3>
+    <div class="note">Dividend Yield in the export is cash-dividend only. Payout = dividend &divide; latest annual EPS (only when EPS &gt; 0); check the dividend fiscal year, which can be older than the EPS year.</div>
+    <div class="tw" id="t-hyd4"></div>
+    <details class="scard" style="margin-top:12px"><summary><b>Not shown &mdash; data not in the export</b></summary>
+      <div class="note">Installed / project MW, generation, capacity utilization, per-MW metrics (revenue, profit, debt), project status and operating stage, total debt, finance cost and interest coverage, and growth / CAGR (only one fiscal period is loaded). These are intentionally left out rather than estimated.</div>
+    </details>
+  </div>
+
   <div id="v-wch" class="subv" hidden>
     <div class="bar"><input id="win" placeholder="Add symbol" list="syms"><button id="wadd">Add</button><button id="wclr">Clear all</button></div>
     <div class="note">Saved in this browser only.</div>
@@ -1961,7 +1954,7 @@ const find=q=>{q=String(q||'').trim().toUpperCase();return R.find(r=>String(r[CO
 const nav=document.createElement('nav');nav.className='vtabs';nav.setAttribute('aria-label','Sections');
 nav.innerHTML='<button class="on" data-v="n">NEWS PORTAL<em>LATEST</em></button><button data-v="scr">STOCK SCREENER</button>';
 const sub=document.createElement('nav');sub.className='vtabs sub';sub.setAttribute('aria-label','Stock screener tools');sub.hidden=true;
-sub.innerHTML=[['v-mkt','MARKET'],['v-s','SCREENER'],['v-map','HEATMAP'],['v-sig','SIGNALS'],['v-val','VALUATION'],['v-qua','QUALITY'],['v-div','DIVIDENDS'],['v-cmp','COMPARE'],['v-360','STOCK 360'],['v-bnk','BANKING'],['v-wch','WATCHLIST']]
+sub.innerHTML=[['v-mkt','MARKET'],['v-s','SCREENER'],['v-map','HEATMAP'],['v-sig','SIGNALS'],['v-val','VALUATION'],['v-qua','QUALITY'],['v-div','DIVIDENDS'],['v-cmp','COMPARE'],['v-360','STOCK 360'],['v-bnk','BANKING'],['v-hyd','HYDROPOWER'],['v-wch','WATCHLIST']]
  .map(a=>`<button data-v="${a[0]}">${a[1]}</button>`).join('');
 const top=document.querySelector('.top');
 if(top){top.after(nav);nav.after(sub)}else{document.body.prepend(sub);document.body.prepend(nav)}
@@ -2134,7 +2127,76 @@ function r_wch(){
   put('wch','#t-wch',['Company','LTP','% Change','1M','3M','1Y','RSI','P/E (Annu.)','P/B','Dividend Yield','Market Cap'],rs);
 }
 
-const VIEWS={'v-mkt':r_mkt,'v-s':r_s,'v-map':r_map,'v-sig':r_sig,'v-val':r_val,'v-qua':r_qua,'v-div':r_div,'v-cmp':r_cmp,'v-360':r_360,'v-bnk':r_bnk,'v-wch':r_wch};
+/* ---------- HYDROPOWER ---------- */
+/* Company list and score weights are injected from Python (HYDRO_SYMBOLS / HYDRO_SCORE_WEIGHTS). All values are
+   derived from the existing screener rows through EX/g(); nothing is typed in per company. */
+const HY=new Set(__HYDRO__),HW=__HYDW__;
+const HYD=R.filter(r=>HY.has(r[CO]));
+['Op Margin','Liab / Assets','Cash Payout','Total Payout','Total Dividend'].forEach(x=>PCT.add(x));
+(function(){
+  const N=['Revenue (NPR mn)','Op Profit (NPR mn)','Net Profit (NPR mn)','Assets (NPR mn)','Liabilities (NPR mn)','Equity (NPR mn)','Paid-up (NPR mn)',
+    'Op Margin','Liab / Assets','Liab / Equity (x)','Mkt Cap / Paid-up (x)','Cash Payout','Total Payout','Total Dividend',
+    'Hydropower Score','Profitability','Valuation','Leverage','Dividend','Score inputs'];
+  N.forEach(n=>EX[n]={});
+  const mn=v=>num(v)?v/1000:null,rd=(v,d)=>num(v)?Math.round(v*d)/d:null;   // export is in NPR thousands
+  const pr=(f,low)=>{const a=HYD.map(f).filter(num).sort((x,y)=>x-y);return v=>{if(!num(v)||a.length<2)return null;let lo=0;while(lo<a.length&&a[lo]<v)lo++;const p=100*lo/(a.length-1);return low?100-p:p}};
+  const avg=a=>{a=a.filter(x=>x!=null);return a.length?a.reduce((s,x)=>s+x,0)/a.length:null};
+  const peOk=r=>{const e=g(r,'EPS (Annu.)'),p=g(r,'P/E (Annu.)');return num(e)&&e>0&&num(p)&&p>0?p:null};
+  const pbOk=r=>{const b=g(r,'P/B');return num(b)&&b>0?b:null};
+  HYD.forEach(r=>{
+    const s=r[CO],A=g(r,'Total Assets'),L=g(r,'Total Liabilities'),Rv=g(r,'Revenue'),Op=g(r,'Operating Profit'),eps=g(r,'EPS (Annu.)');
+    const eq=num(A)&&num(L)?A-L:null;
+    EX['Revenue (NPR mn)'][s]=mn(Rv);EX['Op Profit (NPR mn)'][s]=mn(Op);EX['Net Profit (NPR mn)'][s]=mn(g(r,'Net Profit'));
+    EX['Assets (NPR mn)'][s]=mn(A);EX['Liabilities (NPR mn)'][s]=mn(L);EX['Equity (NPR mn)'][s]=mn(eq);EX['Paid-up (NPR mn)'][s]=mn(g(r,'Paid Up Cap'));
+    EX['Op Margin'][s]=num(Op)&&num(Rv)&&Rv>0?rd(Op/Rv*100,10):null;
+    EX['Liab / Assets'][s]=num(L)&&num(A)&&A>0?rd(L/A*100,10):null;
+    EX['Liab / Equity (x)'][s]=num(L)&&num(eq)&&eq>0?rd(L/eq,100):null;          // equity <= 0 -> not meaningful
+    const mc=g(r,'Market Cap'),pu=g(r,'Paid Up Cap');
+    EX['Mkt Cap / Paid-up (x)'][s]=num(mc)&&num(pu)&&pu>0?rd(mc/pu,100):null;
+    const ca=g(r,'Cash'),tv=g(r,'Total Div'),to=tv!=null?tv:g(r,'Total');   // the dividend total may arrive as 'Total' or 'Total Div'
+    EX['Total Dividend'][s]=num(to)?to:null;
+    EX['Cash Payout'][s]=num(eps)&&eps>0&&num(ca)?rd(ca/eps*100,10):null;
+    EX['Total Payout'][s]=num(eps)&&eps>0&&num(to)?rd(to/eps*100,10):null;
+  });
+  /* Transparent score: percentile rank (0-100) against the other listed hydropower companies only. */
+  const rROE=pr(r=>g(r,'ROE (Annu.)')),rROA=pr(r=>g(r,'ROA (Annu.)')),rNPM=pr(r=>g(r,'NPM'));
+  const rPE=pr(peOk,true),rPB=pr(pbOk,true),rLV=pr(r=>EX['Liab / Assets'][r[CO]],true),rDY=pr(r=>g(r,'Dividend Yield'));
+  HYD.forEach(r=>{
+    const s=r[CO],pe=peOk(r);
+    const c={
+      Profitability:avg([rROE(g(r,'ROE (Annu.)')),rROA(g(r,'ROA (Annu.)')),rNPM(g(r,'NPM'))]),
+      // loss-making (EPS <= 0 or P/E <= 0) cannot be "cheap on earnings": P/E part scores 0
+      Valuation:avg([num(g(r,'P/E (Annu.)'))||num(g(r,'EPS (Annu.)'))?(pe==null?0:rPE(pe)):null,rPB(pbOk(r))]),
+      Leverage:rLV(EX['Liab / Assets'][s]),
+      Dividend:num(g(r,'Dividend Yield'))?rDY(g(r,'Dividend Yield')):null};
+    let w=0,t=0,n=0;
+    Object.keys(HW).forEach(k=>{if(c[k]!=null){w+=HW[k];t+=HW[k]*c[k];n++}});
+    ['Profitability','Valuation','Leverage','Dividend'].forEach(k=>{EX[k][s]=c[k]==null?null:Math.round(c[k])});
+    EX['Hydropower Score'][s]=n>=3&&w>0?Math.round(t/w):null;                      // needs >= 3 of 4 components
+    EX['Score inputs'][s]=n+'/4';
+  });
+})();
+const medn=a=>{a=a.filter(num).sort((x,y)=>x-y);if(!a.length)return null;const m=a.length>>1;return a.length%2?a[m]:(a[m-1]+a[m])/2};
+const meanv=a=>{a=a.filter(num);return a.length?a.reduce((x,y)=>x+y,0)/a.length:null};
+function r_hyd(){
+  const q=($('#hyd-sq').value||'').trim().toLowerCase(),hide=$('#hyd-loss').checked;
+  const rs=HYD.filter(r=>(!q||String(r[CO]).toLowerCase().includes(q))&&(!hide||!(g(r,'Net Profit')<0)));
+  const col=n=>rs.map(r=>g(r,n)),pos=n=>col(n).filter(v=>num(v)&&v>0);
+  const mm=(a,d,u)=>medn(a)==null?'–':fmt(medn(a),d)+(u||'')+' <small>(mean '+fmt(meanv(a),d)+(u||'')+')</small>';
+  const mc=col('Market Cap').filter(num).reduce((a,b)=>a+b,0);
+  const loss=rs.filter(r=>g(r,'Net Profit')<0).length,pay=rs.filter(r=>g(r,'Total Dividend')>0).length;
+  $('#hyd-sst').innerHTML=[['Companies',rs.length],['Total mkt cap (Arba)',arba(mc)],['Median P/E (profitable)',mm(pos('P/E (Annu.)'),1)],['Median P/B',mm(pos('P/B'),2)],
+    ['Median ROE',mm(col('ROE (Annu.)'),1,'%')],['Loss-making',loss],['Paid a dividend',pay]].map(a=>`<div><small>${a[0]}</small><b>${a[1]}</b></div>`).join('');
+  $('#hyd-note').innerHTML=`Company list: ${HYD.length} of ${HY.size} symbols found in the loaded data. <b>The list is not an official NEPSE classification &mdash; verify it.</b> Edit HYDRO_SYMBOLS in nepse_news_hub.py or put hydro_symbols.txt next to the script. Latest annual figures; financials in NPR million, market cap in Arba. Click a column title to sort.`;
+  $('#hyd-snote').textContent='Score = weighted average of percentile ranks among the listed hydropower companies: '+Object.keys(HW).map(k=>k+' '+HW[k]+'%').join(', ')+'. Growth and operating (MW / generation) components are not scored because that data is not loaded. Needs at least 3 of 4 components. Relative ranking only, not a recommendation.';
+  put('hyd0','#t-hyd0',['Company','Hydropower Score','Profitability','Valuation','Leverage','Dividend','Score inputs','LTP','Market Cap'],rs,{k:'Hydropower Score',asc:false});
+  put('hyd1','#t-hyd1',['Company','LTP','% Change','1Y','Market Cap','P/E (Annu.)','P/B','EPS (Annu.)','BVPS','Mkt Cap / Paid-up (x)','Graham Upside %'],rs,{k:'Market Cap',asc:false});
+  put('hyd2','#t-hyd2',['Company','Revenue (NPR mn)','Op Profit (NPR mn)','Net Profit (NPR mn)','Op Margin','NPM','ROE (Annu.)','ROA (Annu.)','Asset Turnover','EPS (Annu.)'],rs,{k:'Net Profit (NPR mn)',asc:false});
+  put('hyd3','#t-hyd3',['Company','Assets (NPR mn)','Liabilities (NPR mn)','Equity (NPR mn)','Liab / Assets','Liab / Equity (x)','Paid-up (NPR mn)'],rs,{k:'Liab / Assets',asc:true});
+  put('hyd4','#t-hyd4',['Company','Div Fiscal Year','Cash','Bonus','Total Dividend','Dividend Yield','Cash Payout','Total Payout','EPS (Annu.)'],rs,{k:'Dividend Yield',asc:false});
+}
+
+const VIEWS={'v-mkt':r_mkt,'v-s':r_s,'v-map':r_map,'v-sig':r_sig,'v-val':r_val,'v-qua':r_qua,'v-div':r_div,'v-cmp':r_cmp,'v-360':r_360,'v-bnk':r_bnk,'v-hyd':r_hyd,'v-wch':r_wch};
 function renderView(){const f=VIEWS[curV];if(f){try{f()}catch(e){console.error('screener view',curV,e)}}}
 
 /* ---------- events ---------- */
@@ -2164,8 +2226,9 @@ scr.addEventListener('click',e=>{
     case 'wclr':wl=[];saveW();renderView();break;
   }
 });
-scr.addEventListener('input',e=>{if(['sq','div-sq'].includes(e.target.id))renderView()});
+scr.addEventListener('input',e=>{if(['sq','div-sq','hyd-sq'].includes(e.target.id))renderView()});
 scr.addEventListener('change',e=>{
+  if(e.target.id==='hyd-loss'){renderView();return}
   if(e.target.closest('#scp')){const c=e.target.dataset.col;sCols=e.target.checked?(sCols.includes(c)?sCols:sCols.concat(c)):sCols.filter(x=>x!==c);if(!sCols.includes('Company'))sCols.unshift('Company');renderView();return}
   if(['sig-sel','val-x','val-y','qua-x','qua-y','div-f'].includes(e.target.id))renderView();
 });
@@ -2185,6 +2248,48 @@ $('#scp').innerHTML=C.filter(c=>c!=='#').map(c=>`<label><input type="checkbox" d
 })();
 </script>
 '''
+
+
+# --------------------------------------------------------------------------------------
+# HYDROPOWER tab configuration
+# --------------------------------------------------------------------------------------
+# The Smart Wealth Pro export has NO sector column, so the Stock Screener cannot tell which companies are
+# hydropower. This list was taken from a third-party sector listing (hamroshare.com.np "Hydro Power" sector,
+# retrieved 2026-10-08, cross-checked by name against ashishdanai.com.np's NEPSE class list). It is NOT an official
+# NEPSE/SEBON classification and is UNVERIFIED: check it against NEPSE before relying on it.
+# To override without editing this file, create hydro_symbols.txt next to this script (symbols separated by
+# spaces, commas or new lines; lines starting with # are ignored). Symbols missing from the loaded data are skipped.
+# Not included on purpose: HIDCL (an investment company, not a generator); CHDC (named as hydro by one source only).
+HYDRO_SYMBOLS = (
+    "SOHL", "UPPER", "SAHAS", "CHCL", "BPCL", "API", "MEN", "SHPC", "TAMOR", "MBJC", "GVL", "NGPL", "RADHI",
+    "SGHL", "SMHL", "MANDU", "RHPL", "PHCL", "SKHL", "AHPC", "AKPL", "SHEL", "SJCL", "RLEL", "SNORL", "UPCL",
+    "RIDI", "BHL", "UMHL", "VLUCL", "AKJCL", "USHEC", "NHPC", "HPPL", "HDHPC", "KAHL", "MEL", "SSHL", "TPKHL",
+    "LEC", "SIKLES", "BJHL", "DORDI", "TVCL", "MEPDL", "SIPD", "BHCL", "DHEL", "SKHEL", "NYADI", "HURJA",
+    "BHDC", "GLH", "GHL", "SMJC", "SGHC", "KPCL", "MSHL", "RFPL", "SPDL", "SANVI", "BUNGAL", "RURU", "HHL",
+    "BARUN", "MMKJL", "KHPL", "YMHL", "UHEWA", "PMHPL", "PPCL", "SMH", "BGWT", "MHNL", "RHGCL", "MAKAR", "PPL",
+    "MHL", "TPC", "APHL", "NHDL", "UNHPL", "KKHC", "MKHC", "UMRH", "HIMSTAR", "MHCL", "BNHC", "MABEL", "CKHL",
+    "CHL", "MEHL", "EHPL", "IHL", "MKHL", "SPC", "ULHC", "TSHL", "DOLTI", "BEDC", "JOSHI", "SPHL", "MCHL",
+    "AHL", "MKJC", "KBSH", "RAWA", "SPL", "USHL", "BHPL", "DHPL",
+)
+# Weights (percent) of the Hydropower Score components. Components with no data are dropped and the rest re-weighted.
+HYDRO_SCORE_WEIGHTS = {"Profitability": 35, "Valuation": 25, "Leverage": 25, "Dividend": 15}
+
+
+def hydro_symbols() -> list:
+    f = Path(__file__).resolve().parent / "hydro_symbols.txt"
+    syms = HYDRO_SYMBOLS
+    if f.is_file():
+        try:
+            txt = "\n".join(l for l in f.read_text(encoding="utf-8").splitlines() if not l.lstrip().startswith("#"))
+            syms = re.split(r"[\s,;]+", txt)
+        except Exception as exc:
+            log.warning("hydro_symbols.txt ignored: %s", exc)
+    return sorted({x.strip().upper() for x in syms if re.fullmatch(r"[A-Za-z0-9]{1,12}", x.strip())})
+
+
+def hydro_weights() -> dict:
+    w = {k: float(v) for k, v in HYDRO_SCORE_WEIGHTS.items() if isinstance(v, (int, float)) and v > 0}
+    return w or {"Profitability": 1.0}
 
 
 def clean_screener(d: dict) -> dict:
@@ -2240,7 +2345,10 @@ def inject_screener(html_doc: str) -> str:
         log.warning("Screener data %s ignored: %s", f.name, exc)
         return html_doc
     data = data.replace("</", "<\\/")
-    return html_doc.replace("</body>", SCREENER_BLOCK.replace("__SDATA__", data) + "</body>", 1)
+    block = (SCREENER_BLOCK.replace("__HYDRO__", json.dumps(hydro_symbols()))
+             .replace("__HYDW__", json.dumps(hydro_weights()))
+             .replace("__SDATA__", data))
+    return html_doc.replace("</body>", block + "</body>", 1)
 
 
 def build_snapshot(p: dict, settings: dict) -> str:
@@ -2788,13 +2896,6 @@ def cmd_serve(args):
 def cmd_collect(args):
     store = Store(CFG.data_dir)
     init_db()
-    try:                                          # housekeeping must never stop a collection run
-        hk = housekeeping(store.settings())
-        print(f"Housekeeping: {hk['after']:,} articles kept, {hk['removed']:,} removed "
-              f"(keep {hk['retention_days']} days; excluded items {hk['excluded_days']} days)"
-              f"{' - database compacted' if hk['compacted'] else ''}")
-    except Exception as exc:
-        print(f"Housekeeping skipped: {exc}")
     engine = Engine(store)
     only = set(args.source) if args.source else None
     totals = engine.run(trigger="cli", only=only, force=args.force, rediscover=args.rediscover)
