@@ -1882,6 +1882,9 @@ SCREENER_BLOCK = r'''<style>
     <h3 class="hh">Dividends</h3>
     <div class="note">Dividend Yield in the export is cash-dividend only. Payout = dividend &divide; latest annual EPS (only when EPS &gt; 0); check the dividend fiscal year, which can be older than the EPS year.</div>
     <div class="tw" id="t-hyd4"></div>
+    <h3 class="hh">Technical analysis</h3>
+    <div class="note">Trend: Uptrend = LTP &gt; SMA20 &gt; SMA50; Downtrend = LTP &lt; SMA20 &lt; SMA50; otherwise Mixed. RSI zone: Oversold &lt; 30, Overbought &gt; 70. Technical readings describe past price behaviour and are not buy/sell recommendations.</div>
+    <div class="tw" id="t-hyd5"></div>
     <details class="scard" style="margin-top:12px"><summary><b>Not shown &mdash; data not in the export</b></summary>
       <div class="note">Installed / project MW, generation, capacity utilization, per-MW metrics (revenue, profit, debt), project status and operating stage, total debt, finance cost and interest coverage, and growth / CAGR (only one fiscal period is loaded). These are intentionally left out rather than estimated.</div>
     </details>
@@ -2135,7 +2138,7 @@ const HYD=R.filter(r=>HY.has(r[CO]));
 ['Op Margin','Liab / Assets','Cash Payout','Total Payout','Total Dividend'].forEach(x=>PCT.add(x));
 (function(){
   const N=['Revenue (NPR mn)','Op Profit (NPR mn)','Net Profit (NPR mn)','Assets (NPR mn)','Liabilities (NPR mn)','Equity (NPR mn)','Paid-up (NPR mn)',
-    'Op Margin','Liab / Assets','Liab / Equity (x)','Mkt Cap / Paid-up (x)','Cash Payout','Total Payout','Total Dividend',
+    'Op Margin','Liab / Assets','Liab / Equity (x)','Mkt Cap / Paid-up (x)','Cash Payout','Total Payout','Total Dividend','Trend','RSI Zone',
     'Hydropower Score','Profitability','Valuation','Leverage','Dividend','Score inputs'];
   N.forEach(n=>EX[n]={});
   const mn=v=>num(v)?v/1000:null,rd=(v,d)=>num(v)?Math.round(v*d)/d:null;   // export is in NPR thousands
@@ -2153,6 +2156,9 @@ const HYD=R.filter(r=>HY.has(r[CO]));
     EX['Liab / Equity (x)'][s]=num(L)&&num(eq)&&eq>0?rd(L/eq,100):null;          // equity <= 0 -> not meaningful
     const mc=g(r,'Market Cap'),pu=g(r,'Paid Up Cap');
     EX['Mkt Cap / Paid-up (x)'][s]=num(mc)&&num(pu)&&pu>0?rd(mc/pu,100):null;
+    const px=g(r,'LTP'),s20=g(r,'SMA20'),s50=g(r,'SMA50'),rsi=g(r,'RSI');
+    EX['Trend'][s]=num(px)&&num(s20)&&num(s50)?(px>s20&&s20>s50?'Uptrend':px<s20&&s20<s50?'Downtrend':'Mixed'):null;
+    EX['RSI Zone'][s]=num(rsi)?(rsi<30?'Oversold':rsi>70?'Overbought':'Neutral'):null;
     const ca=g(r,'Cash'),tv=g(r,'Total Div'),to=tv!=null?tv:g(r,'Total');   // the dividend total may arrive as 'Total' or 'Total Div'
     EX['Total Dividend'][s]=num(to)?to:null;
     EX['Cash Payout'][s]=num(eps)&&eps>0&&num(ca)?rd(ca/eps*100,10):null;
@@ -2193,6 +2199,7 @@ function r_hyd(){
   put('hyd1','#t-hyd1',['Company','LTP','% Change','1Y','Market Cap','P/E (Annu.)','P/B','EPS (Annu.)','BVPS','Mkt Cap / Paid-up (x)','Graham Upside %'],rs,{k:'Market Cap',asc:false});
   put('hyd2','#t-hyd2',['Company','Revenue (NPR mn)','Op Profit (NPR mn)','Net Profit (NPR mn)','Op Margin','NPM','ROE (Annu.)','ROA (Annu.)','Asset Turnover','EPS (Annu.)'],rs,{k:'Net Profit (NPR mn)',asc:false});
   put('hyd3','#t-hyd3',['Company','Assets (NPR mn)','Liabilities (NPR mn)','Equity (NPR mn)','Liab / Assets','Liab / Equity (x)','Paid-up (NPR mn)'],rs,{k:'Liab / Assets',asc:true});
+  put('hyd5','#t-hyd5',['Company','LTP','% Change','1M','3M','6M','1Y','YTD','52 Wk High','52 Wk Low','% Below 52 Wk H','% Above 52 Wk L','180D VWAP','SMA20','SMA50','EMA20','EMA50','RSI','RSI Zone','MACD','Stochastic','ADX','BETA','Trend'],rs,{k:'RSI',asc:true});
   put('hyd4','#t-hyd4',['Company','Div Fiscal Year','Cash','Bonus','Total Dividend','Dividend Yield','Cash Payout','Total Payout','EPS (Annu.)'],rs,{k:'Dividend Yield',asc:false});
 }
 
