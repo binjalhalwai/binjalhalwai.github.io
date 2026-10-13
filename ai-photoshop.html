@@ -332,20 +332,20 @@ footer{border-top:1px solid var(--ln);padding:14px 20px;font-size:12px;color:var
       </div>
       <div class="twocol">
        <div><label for="ppPaper">Paper</label>
-        <select id="ppPaper" class="fsel"><option value="a4p" selected>A4 portrait (210 x 297 mm)</option><option value="a4l">A4 landscape (297 x 210 mm)</option><option value="p46">4 x 6 in photo paper</option><option value="p57">5 x 7 in photo paper</option></select></div>
+        <select id="ppPaper" class="fsel"><option value="p46" selected>4 x 6 in photo paper (10 x 15 cm)</option><option value="a4p">A4 portrait (210 x 297 mm)</option><option value="a4l">A4 landscape (297 x 210 mm)</option><option value="p57">5 x 7 in photo paper</option></select></div>
        <div><label for="ppLayout">Layout</label>
         <select id="ppLayout" class="fsel"><option value="center" selected>Centered, evenly spaced</option><option value="top">Compact at the top (saves paper)</option></select></div>
       </div>
       <div class="twocol">
        <div><label for="ppCuts">Cutting guides</label>
-        <select id="ppCuts" class="fsel"><option value="marks" selected>Corner marks</option><option value="box">Thin lines around photos</option><option value="none">None</option></select></div>
+        <select id="ppCuts" class="fsel"><option value="edge" selected>Cut marks in the margins (photo studio style)</option><option value="marks">Corner marks at each photo</option><option value="box">Thin lines around photos</option><option value="none">None</option></select></div>
        <div></div>
       </div>
       <div class="twocol">
        <div><label for="ppCopies">Copies on sheet</label>
         <select id="ppCopies" class="fsel"><option value="2">2</option><option value="4">4</option><option value="6">6</option><option value="8" selected>8</option><option value="10">10</option><option value="12">12</option><option value="max">As many as fit</option></select></div>
        <div><label for="ppSheetFmt">Sheet file</label>
-        <select id="ppSheetFmt" class="fsel"><option value="pdf">PDF (best for printing)</option><option value="jpg">JPG image</option></select></div>
+        <select id="ppSheetFmt" class="fsel"><option value="jpg" selected>JPG, 300 DPI (for a photo shop)</option><option value="pdf">PDF (best for printing at home or office)</option></select></div>
       </div>
       <div class="dlrow"><button type="button" class="abtn" id="ppDlSheet">Download Print Sheet</button></div>
       <div class="encap" id="ppSheetCap"></div>
@@ -1422,19 +1422,39 @@ function sheetLayout(w, h, copies) {
     pos.push({ x: x0 + c * (w + gx) + (cu - inRow) * (w + gx) / 2, y: y0 + r * (h + gy), who: sh.who[i] });
   }
   // cutting guides as line segments [x1, y1, x2, y2]
-  var segs = [], mode = el.cuts.value, t = Math.min(MARK_LEN, Math.min(gx, gy) / 2 - MARK_OFFSET - 0.1);
-  if (mode === 'marks' && t < 1.2) mode = 'box';          // not enough room between photos: use thin lines instead
-  pos.forEach(function (p) {
-    var x1 = p.x, x2 = p.x + w, y1 = p.y, y2 = p.y + h;
-    if (mode === 'box') {
-      var o = CUT_OFFSET; segs.push([x1 - o, y1 - o, x2 + o, y1 - o], [x2 + o, y1 - o, x2 + o, y2 + o], [x2 + o, y2 + o, x1 - o, y2 + o], [x1 - o, y2 + o, x1 - o, y1 - o]);
-    } else if (mode === 'marks') {
-      var m = MARK_OFFSET;
-      [[x1, y1, -1, -1], [x2, y1, 1, -1], [x1, y2, -1, 1], [x2, y2, 1, 1]].forEach(function (q) {
-        segs.push([q[0] + q[2] * m, q[1], q[0] + q[2] * (m + t), q[1]], [q[0], q[1] + q[3] * m, q[0], q[1] + q[3] * (m + t)]);
-      });
-    }
-  });
+  var segs = [], mode = el.cuts.value, m = MARK_OFFSET;
+  var bx0 = Math.min.apply(null, pos.map(function (p) { return p.x; })), bx1 = Math.max.apply(null, pos.map(function (p) { return p.x + w; }));
+  var by0 = pos[0].y, by1 = pos[pos.length - 1].y + h;
+  var room = Math.min(bx0, P.w - bx1, by0, P.h - P.cap - by1);                     // free space outside the block of photos
+  var tEdge = Math.min(MARK_LEN, room - m - 0.3), tCorner = Math.min(MARK_LEN, Math.min(gx, gy) / 2 - m - 0.1);
+  if (mode === 'marks' && tCorner < 1.2) mode = 'edge';                            // not enough room between photos
+  if (mode === 'edge' && tEdge < 1) mode = 'box';                                  // not enough room in the margins: thin lines
+  if (mode === 'edge') {
+    // short marks in the margins, in line with every photo edge: cut along the lines between two matching marks
+    var cx = {}, ry = {};
+    pos.forEach(function (p) {
+      var kx = p.x.toFixed(2), ky = p.y.toFixed(2);
+      (cx[kx] = cx[kx] || { x: p.x, y1: p.y, y2: p.y + h }); cx[kx].y1 = Math.min(cx[kx].y1, p.y); cx[kx].y2 = Math.max(cx[kx].y2, p.y + h);
+      (ry[ky] = ry[ky] || { y: p.y, x1: p.x, x2: p.x + w }); ry[ky].x1 = Math.min(ry[ky].x1, p.x); ry[ky].x2 = Math.max(ry[ky].x2, p.x + w);
+    });
+    Object.keys(cx).forEach(function (k) {
+      var c = cx[k]; [c.x, c.x + w].forEach(function (x) { segs.push([x, c.y1 - m - tEdge, x, c.y1 - m], [x, c.y2 + m, x, c.y2 + m + tEdge]); });
+    });
+    Object.keys(ry).forEach(function (k) {
+      var r = ry[k]; [r.y, r.y + h].forEach(function (y) { segs.push([r.x1 - m - tEdge, y, r.x1 - m, y], [r.x2 + m, y, r.x2 + m + tEdge, y]); });
+    });
+  } else {
+    pos.forEach(function (p) {
+      var x1 = p.x, x2 = p.x + w, y1 = p.y, y2 = p.y + h;
+      if (mode === 'box') {
+        var o = CUT_OFFSET; segs.push([x1 - o, y1 - o, x2 + o, y1 - o], [x2 + o, y1 - o, x2 + o, y2 + o], [x2 + o, y2 + o, x1 - o, y2 + o], [x1 - o, y2 + o, x1 - o, y1 - o]);
+      } else if (mode === 'marks') {
+        [[x1, y1, -1, -1], [x2, y1, 1, -1], [x1, y2, -1, 1], [x2, y2, 1, 1]].forEach(function (q) {
+          segs.push([q[0] + q[2] * m, q[1], q[0] + q[2] * (m + tCorner), q[1]], [q[0], q[1] + q[3] * m, q[0], q[1] + q[3] * (m + tCorner)]);
+        });
+      }
+    });
+  }
   var bar = P.cap ? { x: P.w - P.margin - 35, y: P.h - P.margin - 1.5, len: 35 } : null;   // 35 mm ruler: measure it after printing
   return { n: n, cols: cu, rows: ru, maxFit: cols * rows, pos: pos, counts: sh.counts, paper: P, segs: segs, bar: bar, mode: mode };
 }
@@ -1446,9 +1466,9 @@ function updateSheetCaption() {
   var S = getSpec(), L = sheetLayout(S.w, S.h, el.copies.value);
   if (!L) el.sheetCap.textContent = 'This photo size does not fit on this paper.';
   else if (L.tooFew) el.sheetCap.textContent = 'You have ' + L.people + ' people but only ' + L.n + ' copies. Choose at least ' + L.people + ' copies so everyone gets a photo.';
-  else el.sheetCap.textContent = L.paper.label + ' (' + +L.paper.w.toFixed(1) + ' x ' + +L.paper.h.toFixed(1) + ' mm): ' + L.n + ' photos (' + L.cols + ' x ' + L.rows + '; up to ' + L.maxFit + ' fit). Print at 100% / "Actual size".' + (L.bar ? ' The 35 mm bar on the sheet should measure exactly 35 mm.' : '') + peopleText(L);
+  else el.sheetCap.textContent = L.paper.label + ' (' + +L.paper.w.toFixed(1) + ' x ' + +L.paper.h.toFixed(1) + ' mm): ' + L.n + ' photos (' + L.cols + ' x ' + L.rows + '; up to ' + L.maxFit + ' fit). Print at 100% / "Actual size".' + (L.bar ? ' The 35 mm bar on the sheet should measure exactly 35 mm.' : '') + (el.sheetFmt.value === 'jpg' ? ' JPG file: ' + Math.round(L.paper.w / 25.4 * DPI) + ' x ' + Math.round(L.paper.h / 25.4 * DPI) + ' px at ' + DPI + ' DPI.' : '') + peopleText(L);
 }
-['change'].forEach(function (ev) { el.copies.addEventListener(ev, updateSheetCaption); el.paper.addEventListener(ev, updateSheetCaption); el.layout.addEventListener(ev, updateSheetCaption); el.cuts.addEventListener(ev, updateSheetCaption); });
+['change'].forEach(function (ev) { el.copies.addEventListener(ev, updateSheetCaption); el.paper.addEventListener(ev, updateSheetCaption); el.layout.addEventListener(ev, updateSheetCaption); el.cuts.addEventListener(ev, updateSheetCaption); el.sheetFmt.addEventListener(ev, updateSheetCaption); });
 
 /* --- several people on one sheet --- */
 function renderPeople() {
