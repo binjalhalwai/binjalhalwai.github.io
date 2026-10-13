@@ -1,0 +1,768 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Photoshop - Unblur &amp; Enhance Photo, Remove Background | Binjal Halwai NewsPortal</title>
+<meta name="description" content="Free photo tools: unblur and enhance photos privately in your browser, and remove image backgrounds to get a transparent PNG.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%234d5b2a'/%3E%3Ctext x='16' y='22' font-size='15' font-weight='700' text-anchor='middle' fill='white' font-family='Arial'%3EBH%3C/text%3E%3C/svg%3E">
+<script>try{var t=localStorage.getItem('aiph_theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
+<style>
+:root{--bg:#14170b;--p:#1f2412;--p2:#232914;--ln:rgba(238,241,220,.12);--tx:#ffffff;--mu:#dfe5c8;--ac:#a3b565;--ach:#b8c97c;--ac2:#b8c97c;--lk:#b8c97c;--hi:#ff7a5c;--md:#38bdf8;--lo:#838b68;--ok:#4ade80;--wa:#f5c542;--bad:#fb7185;--ch:#2a3116;--gA:#b8c97c;--gB:#a3b565;--onac:#14170b;--hd1:#1a1e0f;--hd2:#1a1e0f;--hdtx:#ffffff;--hdmu:#dfe5c8;--hdln:rgba(238,241,220,.28);--hdbg:rgba(238,241,220,.06);--s2:#4ade80;--s3:#b8c97c;--s4:#8b9470;--s5:#fb7185;--s6:#a3b565;--s7:#7fb59a}
+[data-theme=light]{--bg:#f7f8ee;--p:#ffffff;--p2:#fafbf2;--ln:rgba(77,91,42,.18);--tx:#000000;--mu:#3d4526;--ac:#4d5b2a;--ach:#3d4922;--ac2:#65772f;--lk:#65772f;--hi:#d9381e;--md:#0369a1;--lo:#8b9470;--wa:#8a5a00;--ok:#16a34a;--bad:#e11d48;--ch:#e7ebd2;--gA:#65772f;--gB:#4d5b2a;--onac:#ffffff;--hd1:#f1f3e0;--hd2:#f1f3e0;--hdtx:#000000;--hdmu:#3d4526;--hdln:rgba(77,91,42,.35);--hdbg:#ffffff;--s2:#16a34a;--s3:#65772f;--s4:#a3b565;--s5:#e11d48;--s6:#8b9470;--s7:#4d8f6b}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:Inter,"Segoe UI",system-ui,Arial,sans-serif;font-size:14px;line-height:1.45;min-height:100vh;display:flex;flex-direction:column}
+a{color:var(--lk)}
+.skip{position:absolute;left:-999px;top:0;background:var(--ac);color:var(--onac);padding:8px 12px;z-index:50}.skip:focus{left:8px;top:8px}
+.top{position:sticky;top:0;z-index:20;display:flex;gap:14px;align-items:center;justify-content:space-between;padding:10px 20px;background:linear-gradient(100deg,var(--hd1),var(--hd2));color:var(--hdtx);box-shadow:0 4px 18px color-mix(in srgb,var(--gB) 18%,transparent);flex-wrap:wrap}
+.top::after{content:"";position:absolute;left:0;right:0;bottom:-3px;height:3px;background:linear-gradient(90deg,var(--ac2),var(--gA) 50%,var(--gB))}
+.brand{display:flex;gap:10px;align-items:center;text-decoration:none;color:inherit}
+.logo{width:46px;height:46px;display:grid;place-items:center;font-weight:800;font-size:18px;font-family:Consolas,monospace;border-radius:8px;background:linear-gradient(135deg,var(--gA),var(--gB));color:var(--onac);box-shadow:0 0 0 2px rgba(255,255,255,.55),0 4px 14px color-mix(in srgb,var(--gB) 35%,transparent)}
+.brand b{display:block;letter-spacing:.06em;font-size:26px;font-weight:800;line-height:1.1;white-space:nowrap;color:var(--hdtx)}.brand b span{color:var(--ac2)}
+.brand small{display:block;color:var(--hdmu);font-size:11px;margin-top:2px}
+.ic{background:var(--hdbg);color:var(--hdtx);border:1px solid var(--hdln);border-radius:6px;min-width:38px;min-height:38px;cursor:pointer;font:inherit}
+.ic:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+.vtabs{display:flex;gap:6px;align-items:flex-end;padding:14px 14px 0;background:var(--bg);overflow-x:auto;-webkit-overflow-scrolling:touch;white-space:nowrap;border-bottom:1px solid var(--ln);scrollbar-width:none}
+.vtabs::-webkit-scrollbar{display:none}
+.vtabs a{display:inline-flex;align-items:center;border:1px solid var(--ln);background:var(--p);color:var(--mu);border-radius:8px 8px 0 0;padding:8px 14px;font-weight:600;font-size:12px;min-height:38px;flex:0 0 auto;text-decoration:none;transition:all .15s ease}
+.vtabs a.on{color:var(--onac);background:var(--ac);border-color:transparent;font-weight:700}
+.vtabs a:not(.on):hover{border-color:var(--ac);color:var(--ac)}
+.vtabs a:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+main{flex:1}
+footer{border-top:1px solid var(--ln);padding:14px 20px;font-size:12px;color:var(--mu);text-align:center}
+@media(max-width:640px){.top{padding:10px 12px}.brand b{font-size:19px;white-space:normal}.logo{width:40px;height:40px;font-size:16px}}
+
+</style>
+</head>
+<body>
+<a class="skip" href="#aiph">Skip to main content</a>
+<header class="top" role="banner">
+ <a class="brand" href="./" aria-label="Binjal Halwai NewsPortal home"><span class="logo" aria-hidden="true">BH</span><div><b>BINJAL HALWAI <span>NEWSPORTAL</span></b><small>NEPSE News Hub - Nepal Stock Market News, All in One Place</small></div></a>
+ <button id="bTheme" class="ic" type="button" title="Toggle light/dark theme" aria-label="Toggle light and dark theme">&#9680;</button>
+</header>
+<nav class="vtabs" aria-label="Sections">
+ <a href="./">NEWS PORTAL</a><a href="./">STOCK SCREENER</a><a href="./#calc">CALCULATORS</a><a href="./ai-photoshop.html" class="on" aria-current="page">AI PHOTOSHOP</a>
+</nav>
+<main id="maincontent">
+<style>
+#aiph{padding:12px 16px 28px;max-width:1200px;margin:0 auto;min-width:0}
+#aiph[hidden]{display:none!important}
+#aiph .chead h2{margin:4px 0 4px;font-size:20px}
+#aiph .chead p{margin:0 0 12px;color:var(--mu);font-size:13px;max-width:80ch}
+#aiph .agrid{display:grid;grid-template-columns:minmax(0,4fr) minmax(0,8fr);gap:14px;align-items:start}
+@media(max-width:820px){#aiph .agrid{grid-template-columns:minmax(0,1fr)}}
+#aiph .cc{background:var(--p);border:1px solid var(--ln);border-radius:8px;padding:14px;min-width:0}
+#aiph h3{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--mu)}
+#aiph .drop{border:2px dashed var(--ln);border-radius:8px;padding:18px 12px;text-align:center;background:var(--ch);transition:border-color .15s ease}
+#aiph .drop.over{border-color:var(--ac)}
+#aiph .drop p{margin:8px 0 0;font-size:12px;color:var(--mu)}
+#aiph .abtn{background:var(--ac);color:var(--onac);border:0;border-radius:6px;padding:8px 16px;min-height:38px;font:inherit;font-weight:700;font-size:13px;cursor:pointer}
+#aiph .abtn:hover:not(:disabled){background:var(--ach)}
+#aiph .abtn.ghost{background:var(--p);color:var(--tx);border:1px solid var(--ln);font-weight:600}
+#aiph .abtn.ghost:hover:not(:disabled){border-color:var(--ac);color:var(--ac);background:var(--p)}
+#aiph .abtn:disabled{opacity:.45;cursor:not-allowed}
+#aiph .abtn:focus-visible,#aiph .drop:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+#aiph .aact{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+#aiph .finfo{margin-top:10px;font-size:12px;color:var(--mu);overflow-wrap:anywhere;min-height:1.2em}
+#aiph .finfo b{color:var(--tx)}
+#aiph .amsg{margin-top:10px;font-size:13px;min-height:1.3em}
+#aiph .amsg.err{background:var(--ch);border:1px solid var(--bad);border-radius:6px;padding:8px 12px;color:var(--bad)}
+#aiph .amsg.ok{color:var(--ok)}
+#aiph .anote{margin-top:14px;border-top:1px solid var(--ln);padding-top:10px;font-size:11.5px;color:var(--mu)}
+#aiph .pv{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media(max-width:560px){#aiph .pv{grid-template-columns:minmax(0,1fr)}}
+#aiph .pane{min-width:0}
+#aiph .pane small{display:block;margin:0 0 6px;color:var(--mu);font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+#aiph .box{position:relative;border:1px solid var(--ln);border-radius:8px;min-height:240px;aspect-ratio:1/1;display:grid;place-items:center;overflow:hidden;background:var(--ch)}
+#aiph .box.chk{background-color:var(--p);background-image:linear-gradient(45deg,var(--ch) 25%,transparent 25%,transparent 75%,var(--ch) 75%),linear-gradient(45deg,var(--ch) 25%,transparent 25%,transparent 75%,var(--ch) 75%);background-size:20px 20px;background-position:0 0,10px 10px}
+#aiph .box img{max-width:100%;max-height:100%;object-fit:contain;display:block}
+#aiph .box .ph{color:var(--mu);font-size:12px;padding:12px;text-align:center}
+#aiph .box[hidden],#aiph .ph[hidden],#aiph img[hidden]{display:none}
+#aiph .busy{position:absolute;inset:0;display:none;flex-direction:column;gap:10px;align-items:center;justify-content:center;background:rgba(0,0,0,.55);color:#fff;font-size:13px;text-align:center;padding:10px}
+#aiph .busy.on{display:flex}
+#aiph .spin{width:34px;height:34px;border:4px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:aiphspin .8s linear infinite}
+@keyframes aiphspin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){#aiph .spin{animation-duration:2.4s}}
+@media(max-width:640px){#aiph{padding:10px 8px 24px}#aiph .abtn{flex:1 1 auto}}
+@media(max-width:480px){.vtabs:not(.sub){overflow-x:auto}}
+/* ===== AI Photoshop: tool switcher + Unblur & Enhance Photo ===== */
+#aiph .aitools{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px}
+#aiph .aitool{background:var(--p);color:var(--tx);border:1px solid var(--ln);border-radius:16px;padding:6px 16px;min-height:36px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+#aiph .aitool:hover{border-color:var(--ac);color:var(--ac)}
+#aiph .aitool.on{background:var(--ac);color:var(--onac);border-color:transparent}
+#aiph .aitool:focus-visible,#aiph .chip:focus-visible,#aiph .segb:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+#aiph .engrid{display:grid;grid-template-columns:minmax(0,4fr) minmax(0,8fr);grid-template-rows:auto 1fr;grid-template-areas:"up cmp" "ctl cmp";gap:14px;align-items:start}
+#aiph .en-up{grid-area:up}#aiph .en-ctl{grid-area:ctl}
+#aiph .en-cmp{grid-area:cmp;position:sticky;top:84px}
+@media(max-width:820px){#aiph .engrid{grid-template-columns:minmax(0,1fr);grid-template-rows:none;grid-template-areas:"up" "cmp" "ctl"}#aiph .en-cmp{position:static}}
+#aiph .chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px}
+#aiph .chip{background:var(--p);color:var(--tx);border:1px solid var(--ln);border-radius:16px;padding:5px 12px;min-height:34px;font:inherit;font-size:12px;cursor:pointer}
+#aiph .chip:hover{border-color:var(--ac);color:var(--ac)}
+#aiph .chip.on{background:var(--ac);color:var(--onac);border-color:transparent}
+#aiph .srow{display:grid;grid-template-columns:1fr auto;gap:2px 8px;margin:0 0 8px}
+#aiph .srow label{font-size:12px;font-weight:600}
+#aiph .srow output{font-size:12px;color:var(--mu);font-variant-numeric:tabular-nums}
+#aiph .srow input[type=range]{grid-column:1/-1;width:100%;accent-color:var(--ac);margin:2px 0 0;min-height:26px}
+#aiph .srow input[type=range]:disabled{opacity:.5}
+#aiph .seg2{display:flex;border:1px solid var(--ln);border-radius:6px;overflow:hidden;margin:0 0 12px;width:max-content;max-width:100%}
+#aiph .segb{background:var(--p);color:var(--tx);border:0;border-right:1px solid var(--ln);padding:6px 14px;min-height:34px;font:inherit;font-size:12px;font-weight:600;cursor:pointer}
+#aiph .segb:last-child{border-right:0}
+#aiph .segb.on{background:var(--ac);color:var(--onac)}
+#aiph .fsel{width:100%;background:var(--p);color:var(--tx);border:1px solid var(--ln);border-radius:6px;padding:6px 10px;min-height:38px;font:inherit;margin:0 0 10px}
+#aiph .cmpwrap{display:flex;justify-content:center}
+#aiph .cmpbox{position:relative;width:100%;aspect-ratio:4/3;border:1px solid var(--ln);border-radius:8px;overflow:hidden;background:var(--ch);touch-action:pan-y;user-select:none;-webkit-user-select:none;cursor:ew-resize}
+#aiph .cmpbox canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#aiph .cmpbox canvas[hidden]{display:none}
+#aiph .cmpbox canvas.after{clip-path:inset(0 0 0 50%)}
+#aiph .enph{position:absolute;inset:0;display:grid;place-items:center;color:var(--mu);font-size:12px;padding:12px;text-align:center;cursor:default}
+#aiph .enph[hidden]{display:none}
+#aiph .cmpline{position:absolute;top:0;bottom:0;left:50%;width:2px;margin-left:-1px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.4);pointer-events:none}
+#aiph .cmpknob{position:absolute;top:50%;left:50%;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;background:#fff;color:#222;display:grid;place-items:center;font-size:15px;box-shadow:0 1px 6px rgba(0,0,0,.5)}
+#aiph .cmptag{position:absolute;top:8px;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;background:rgba(0,0,0,.62);color:#fff;padding:2px 9px;border-radius:10px;pointer-events:none}
+#aiph .cmptag.l{left:8px}#aiph .cmptag.r{right:8px}
+#aiph .cmpbox[data-empty="1"] .cmpline,#aiph .cmpbox[data-empty="1"] .cmptag{display:none}
+#aiph #enPos{width:100%;accent-color:var(--ac);margin:10px 0 0;min-height:26px}
+#aiph .encap{margin-top:8px;font-size:12px;color:var(--mu);overflow-wrap:anywhere}
+</style>
+<section id="aiph" aria-label="AI Photoshop">
+ <div class="aitools" role="group" aria-label="AI Photoshop tools">
+  <button type="button" class="aitool on" data-ait="bg" aria-pressed="true">Remove Background</button>
+  <button type="button" class="aitool" data-ait="en" aria-pressed="false">Unblur &amp; Enhance</button>
+ </div>
+<div id="aiToolBg">
+ <div class="chead"><h2>Remove Image Background</h2>
+  <p>Upload a JPG, PNG or WebP photo and get back a transparent PNG with the background removed.</p></div>
+ <div class="agrid">
+  <div class="cc">
+   <h3>1. Choose image</h3>
+   <div class="drop" id="aiDrop" tabindex="0" role="button" aria-label="Choose an image or drop it here">
+    <button type="button" class="abtn" id="aiPick">Choose Image</button>
+    <p>or drag and drop it here<br>JPG, PNG or WebP, up to 10 MB</p>
+    <input type="file" id="aiFile" accept="image/jpeg,image/png,image/webp" hidden>
+   </div>
+   <div class="finfo" id="aiInfo"></div>
+   <h3 style="margin-top:14px">2. Remove background</h3>
+   <div class="aact">
+    <button type="button" class="abtn" id="aiGo">Remove Background</button>
+    <button type="button" class="abtn ghost" id="aiReset">Reset</button>
+   </div>
+   <div class="amsg" id="aiMsg" role="status" aria-live="polite"></div>
+   <div class="anote">Your image is sent to an online background-removal service to be processed. Do not upload confidential client or company images.</div>
+  </div>
+  <div class="cc">
+   <h3>3. Before and after</h3>
+   <div class="pv">
+    <div class="pane"><small>Before</small>
+     <div class="box" id="aiBeforeBox"><span class="ph" id="aiBeforePh">Your image will appear here</span><img id="aiBefore" alt="Original image preview" hidden></div></div>
+    <div class="pane"><small>After (transparent PNG)</small>
+     <div class="box chk" id="aiAfterBox"><span class="ph" id="aiAfterPh">The result will appear here</span><img id="aiAfter" alt="Image with background removed" hidden>
+      <div class="busy" id="aiBusy" role="alert"><div class="spin" aria-hidden="true"></div><span>Removing background...<br>this can take a few seconds</span></div></div></div>
+   </div>
+   <div class="aact"><button type="button" class="abtn" id="aiDl" disabled>Download PNG</button></div>
+  </div>
+ </div>
+</div>
+<div id="aiToolEn" hidden>
+ <div class="chead"><h2>Unblur &amp; Enhance Photo</h2>
+  <p>Sharpen soft photos and improve brightness, contrast and colour. Everything happens inside your browser: your photo is never uploaded and no online service is used.</p></div>
+ <div class="engrid">
+  <div class="cc en-up">
+   <h3>1. Choose photo</h3>
+   <div class="drop" id="enDrop" tabindex="0" role="button" aria-label="Choose a photo or drop it here">
+    <button type="button" class="abtn" id="enPick">Choose Photo</button>
+    <p>or drag and drop it here<br>JPG, PNG or WebP, up to 15 MB</p>
+    <input type="file" id="enFile" accept="image/jpeg,image/png,image/webp" hidden>
+   </div>
+   <div class="finfo" id="enInfo"></div>
+   <div class="amsg" id="enMsg" role="status" aria-live="polite"></div>
+  </div>
+
+  <div class="cc en-cmp">
+   <h3>Before / After</h3>
+   <div class="seg2" role="group" aria-label="Comparison view">
+    <button type="button" class="segb on" data-view="split" aria-pressed="true">Split</button>
+    <button type="button" class="segb" data-view="before" aria-pressed="false">Original</button>
+    <button type="button" class="segb" data-view="after" aria-pressed="false">Enhanced</button>
+   </div>
+   <div class="cmpwrap">
+    <div class="cmpbox" id="enBox" data-empty="1">
+     <span class="enph" id="enPh">Your photo will appear here</span>
+     <canvas id="enBefore" hidden aria-label="Original photo"></canvas>
+     <canvas id="enAfter" class="after" hidden aria-label="Enhanced photo"></canvas>
+     <span class="cmptag l">Original</span><span class="cmptag r">Enhanced</span>
+     <div class="cmpline" id="enLine"><div class="cmpknob" aria-hidden="true">&#8646;</div></div>
+     <div class="busy" id="enBusy" role="alert"><div class="spin" aria-hidden="true"></div><span id="enBusyTxt">Processing...</span></div>
+    </div>
+   </div>
+   <input type="range" id="enPos" min="0" max="100" value="50" aria-label="Before and after comparison position">
+   <div class="encap" id="enCap">Drag the line on the photo, or use the slider, to compare. The preview is shown at reduced size; the download uses your full-size photo.</div>
+  </div>
+
+  <div class="cc en-ctl">
+   <h3>2. Presets</h3>
+   <div class="chips" role="group" aria-label="Presets">
+    <button type="button" class="chip" data-preset="auto">Auto Enhance</button>
+    <button type="button" class="chip" data-preset="unblur">Unblur</button>
+    <button type="button" class="chip" data-preset="portrait">Portrait</button>
+    <button type="button" class="chip" data-preset="product">Product Photo</button>
+    <button type="button" class="chip" data-preset="reset">Reset</button>
+   </div>
+   <h3>3. Fine tune</h3>
+   <div class="srow"><label for="enSharp">Sharpness</label><output id="enSharpV" for="enSharp">0</output><input type="range" id="enSharp" min="0" max="100" value="0" disabled></div>
+   <div class="srow"><label for="enLocal">Local contrast (clarity)</label><output id="enLocalV" for="enLocal">0</output><input type="range" id="enLocal" min="0" max="100" value="0" disabled></div>
+   <div class="srow"><label for="enBright">Brightness</label><output id="enBrightV" for="enBright">0</output><input type="range" id="enBright" min="-100" max="100" value="0" disabled></div>
+   <div class="srow"><label for="enContrast">Contrast</label><output id="enContrastV" for="enContrast">0</output><input type="range" id="enContrast" min="-100" max="100" value="0" disabled></div>
+   <div class="srow"><label for="enSat">Saturation</label><output id="enSatV" for="enSat">0</output><input type="range" id="enSat" min="-100" max="100" value="0" disabled></div>
+   <div class="srow"><label for="enDenoise">Denoise / smoothing</label><output id="enDenoiseV" for="enDenoise">0</output><input type="range" id="enDenoise" min="0" max="100" value="0" disabled></div>
+   <h3 style="margin-top:14px">4. Size and download</h3>
+   <div class="seg2" role="group" aria-label="Image scale">
+    <button type="button" class="segb on" data-scale="1" aria-pressed="true">Original</button>
+    <button type="button" class="segb" data-scale="1.5" aria-pressed="false">1.5x</button>
+    <button type="button" class="segb" data-scale="2" aria-pressed="false">2x</button>
+   </div>
+   <select id="enFmt" class="fsel" aria-label="Download format">
+    <option value="png">PNG (best quality)</option>
+    <option value="jpg">JPG (smaller file)</option>
+   </select>
+   <div class="aact"><button type="button" class="abtn" id="enDl">Download Enhanced Image</button></div>
+   <div class="encap" id="enSize"></div>
+   <div class="anote">Private: this tool runs entirely in your browser. Nothing is uploaded or stored.</div>
+  </div>
+ </div>
+</div>
+</section>
+<script>
+(function () {
+'use strict';
+/* ====== SETTINGS: the only place you may need to edit ====== */
+// Address of YOUR Cloudflare Worker (see cloudflare-worker/README). Replace YOUR-SUBDOMAIN after deploying it.
+var PROXY_URL = 'https://removebg-proxy.YOUR-SUBDOMAIN.workers.dev/api/remove-background';
+var MAX_BYTES = 10 * 1024 * 1024;                      // 10 MB (remove.bg itself allows 22 MB)
+var TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+var TIMEOUT_MS = 60000;
+/* =========================================================== */
+
+var $ = function (id) { return document.getElementById(id); };
+var file = null, beforeUrl = null, afterUrl = null, busy = false;
+var el = {
+  drop: $('aiDrop'), pick: $('aiPick'), input: $('aiFile'), info: $('aiInfo'), go: $('aiGo'), reset: $('aiReset'),
+  msg: $('aiMsg'), before: $('aiBefore'), beforePh: $('aiBeforePh'), after: $('aiAfter'), afterPh: $('aiAfterPh'),
+  busy: $('aiBusy'), dl: $('aiDl')
+};
+if (!el.drop) return;
+
+function say(text, kind) { el.msg.textContent = text || ''; el.msg.className = 'amsg' + (kind ? ' ' + kind : ''); }
+function sizeText(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'; }
+function revoke(u) { if (u) { try { URL.revokeObjectURL(u); } catch (e) { } } }
+
+function clearAfter() {
+  revoke(afterUrl); afterUrl = null;
+  el.after.removeAttribute('src'); el.after.hidden = true; el.afterPh.hidden = false; el.dl.disabled = true;
+}
+function setBusy(on) {
+  busy = on; el.busy.classList.toggle('on', on);
+  el.go.disabled = on; el.reset.disabled = on; el.pick.disabled = on;
+}
+
+/* ---- validation (messages are shown to the user) ---- */
+function problem(f) {
+  if (!f) return 'No file selected. Please choose an image first.';
+  if (TYPES.indexOf(f.type) < 0) return 'Unsupported file type. Please use a JPG, PNG or WebP image.';
+  if (f.size > MAX_BYTES) return 'File too large (' + sizeText(f.size) + '). The maximum size is ' + sizeText(MAX_BYTES) + '.';
+  if (f.size === 0) return 'This file is empty. Please choose another image.';
+  return '';
+}
+
+function choose(f) {
+  clearAfter(); say('');
+  var p = problem(f);
+  if (p) {
+    file = null; revoke(beforeUrl); beforeUrl = null;
+    el.before.removeAttribute('src'); el.before.hidden = true; el.beforePh.hidden = false;
+    el.info.textContent = ''; say(p, 'err'); return;
+  }
+  file = f; revoke(beforeUrl); beforeUrl = URL.createObjectURL(f);
+  el.before.src = beforeUrl; el.before.hidden = false; el.beforePh.hidden = true;
+  el.info.innerHTML = '';
+  var b = document.createElement('b'); b.textContent = f.name;
+  el.info.appendChild(b); el.info.appendChild(document.createTextNode(' (' + sizeText(f.size) + ')'));
+}
+
+function fail(status, serverMsg) {
+  var m;
+  if (status === 400) m = 'The service could not process this image. Try a different photo.' + (serverMsg ? ' (' + serverMsg + ')' : '');
+  else if (status === 402) m = 'The background-removal service has run out of credits. Please try again later.';
+  else if (status === 403) m = 'This website is not allowed to use the service, or the service key is invalid.';
+  else if (status === 413) m = 'File too large for the service. Please use a smaller image.';
+  else if (status === 415) m = 'Unsupported file type. Please use a JPG, PNG or WebP image.';
+  else if (status === 429) m = 'Too many requests. Please wait a minute and try again.';
+  else if (status >= 500) m = 'The background-removal service is having problems. Please try again later.';
+  else m = 'Something went wrong (error ' + status + ').' + (serverMsg ? ' ' + serverMsg : '');
+  say(m, 'err');
+}
+
+async function run() {
+  if (busy) return;
+  var p = problem(file);
+  if (p) { say(p, 'err'); return; }
+  if (PROXY_URL.indexOf('YOUR-SUBDOMAIN') >= 0) {
+    say('Background removal is not available yet. You can try Unblur & Enhance, or check back soon.', 'err'); return;   /* owner: set PROXY_URL above to your deployed Worker address to switch this tool on */
+  }
+  clearAfter(); say(''); setBusy(true);
+  var ctl = new AbortController(), timer = setTimeout(function () { ctl.abort(); }, TIMEOUT_MS);
+  try {
+    var fd = new FormData();
+    fd.append('image_file', file, file.name);
+    var res = await fetch(PROXY_URL, { method: 'POST', body: fd, signal: ctl.signal });
+    if (!res.ok) {
+      var detail = '';
+      try { var j = await res.json(); detail = (j && (j.error || j.message)) || ''; } catch (e) { }
+      fail(res.status, detail); return;
+    }
+    var blob = await res.blob();
+    if (!blob || blob.size === 0 || blob.type.indexOf('image/') !== 0) { say('The service returned an unexpected response. Please try again.', 'err'); return; }
+    afterUrl = URL.createObjectURL(blob);
+    el.after.src = afterUrl; el.after.hidden = false; el.afterPh.hidden = true; el.dl.disabled = false;
+    say('Done. Check the result, then click Download PNG.', 'ok');
+  } catch (e) {
+    if (e && e.name === 'AbortError') say('The request took too long and was stopped. Please try again.', 'err');
+    else say('Network error. Please check your internet connection and try again.', 'err');
+  } finally {
+    clearTimeout(timer); setBusy(false);
+  }
+}
+
+function download() {
+  if (!afterUrl) return;
+  var base = (file && file.name ? file.name.replace(/\.[^.]+$/, '') : 'image').replace(/[^\w\-]+/g, '_') || 'image';
+  var a = document.createElement('a'); a.href = afterUrl; a.download = base + '-no-bg.png';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+function reset() {
+  file = null; revoke(beforeUrl); beforeUrl = null; clearAfter(); el.input.value = '';
+  el.before.removeAttribute('src'); el.before.hidden = true; el.beforePh.hidden = false; el.info.textContent = ''; say('');
+}
+
+el.pick.addEventListener('click', function (e) { e.stopPropagation(); el.input.click(); });
+el.drop.addEventListener('click', function () { if (!busy) el.input.click(); });
+el.drop.addEventListener('keydown', function (e) { if ((e.key === 'Enter' || e.key === ' ') && e.target === el.drop) { e.preventDefault(); if (!busy) el.input.click(); } });
+el.input.addEventListener('change', function () { choose(el.input.files && el.input.files[0]); });
+['dragenter', 'dragover'].forEach(function (n) { el.drop.addEventListener(n, function (e) { e.preventDefault(); el.drop.classList.add('over'); }); });
+['dragleave', 'drop'].forEach(function (n) { el.drop.addEventListener(n, function (e) { e.preventDefault(); el.drop.classList.remove('over'); }); });
+el.drop.addEventListener('drop', function (e) { if (!busy && e.dataTransfer && e.dataTransfer.files.length) choose(e.dataTransfer.files[0]); });
+el.go.addEventListener('click', run);
+el.reset.addEventListener('click', reset);
+el.dl.addEventListener('click', download);
+})();
+</script>
+<script>
+(function () {
+'use strict';
+/* =========================================================================
+   UNBLUR & ENHANCE PHOTO  -  runs 100% in the browser (HTML Canvas).
+   No upload, no API key, no server.
+
+   Map of this file (for beginners):
+     1. SETTINGS  - limits and preset values you can safely edit
+     2. ENGINE    - the image filters: blur, denoise, tone, sharpen
+     3. SCREEN    - buttons, sliders, preview, before/after, download
+   ========================================================================= */
+
+/* ---------------- 1. SETTINGS ---------------- */
+var MAX_BYTES = 15 * 1024 * 1024;            // biggest file accepted (15 MB)
+var TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+var PREVIEW_LONG = 1280;                     // preview size in pixels (smaller = faster sliders)
+var MAX_LONG_SIDE = 6000;                    // very large photos are reduced to this (longest side)
+var MAX_OUTPUT_PIXELS = 16000000;            // output limit: phones cannot make bigger canvases
+var MAX_SOURCE_PIXELS = 100000000;           // refuse absurd sizes that would crash the browser
+var JPG_QUALITY = 0.95;                      // JPG download quality (0 to 1)
+var LIVE_DELAY = 150;                        // wait (ms) after a slider moves before re-processing
+
+// Slider values (all start at 0). Meaning of each:
+//   sharp    0-100   edge sharpening (the "unblur" strength)
+//   local    0-100   local contrast / clarity (makes detail pop)
+//   bright  -100-100 brighter or darker
+//   contrast-100-100 more or less contrast
+//   sat     -100-100 colour strength
+//   denoise  0-100   smoothing of grain and noise (keeps strong edges)
+var DEFAULTS = { sharp: 0, local: 0, bright: 0, contrast: 0, sat: 0, denoise: 0 };
+
+// Presets. Edit the numbers to change how each button behaves.
+// ("Auto Enhance" is calculated from your photo, see autoSettings() below.)
+var PRESETS = {
+  unblur:   { sharp: 70, local: 30, bright: 0, contrast: 6,  sat: 4,  denoise: 25 },
+  portrait: { sharp: 25, local: 10, bright: 6, contrast: 4,  sat: 4,  denoise: 35 },
+  product:  { sharp: 50, local: 35, bright: 8, contrast: 14, sat: 15, denoise: 15 }
+};
+
+/* ---------------- 2. ENGINE ---------------- */
+
+// Fast box blur of ONE channel (an array of 0-255 numbers, one per pixel).
+// Used by denoise, local contrast and sharpening.
+function blurH(src, dst, w, h, r) {            // horizontal pass
+  var div = 2 * r + 1, half = div >> 1;
+  for (var y = 0; y < h; y++) {
+    var o = y * w, sum = src[o] * (r + 1);
+    for (var i = 1; i <= r; i++) sum += src[o + Math.min(i, w - 1)];
+    for (var x = 0; x < w; x++) {
+      dst[o + x] = (sum + half) / div | 0;
+      sum += src[o + Math.min(x + r + 1, w - 1)] - src[o + Math.max(x - r, 0)];
+    }
+  }
+}
+function blurV(src, dst, w, h, r) {            // vertical pass
+  var div = 2 * r + 1, half = div >> 1, sums = new Int32Array(w), x, y, i, row;
+  for (x = 0; x < w; x++) sums[x] = src[x] * (r + 1);
+  for (i = 1; i <= r; i++) { row = Math.min(i, h - 1) * w; for (x = 0; x < w; x++) sums[x] += src[row + x]; }
+  for (y = 0; y < h; y++) {
+    var o = y * w, add = Math.min(y + r + 1, h - 1) * w, sub = Math.max(y - r, 0) * w;
+    for (x = 0; x < w; x++) { dst[o + x] = (sums[x] + half) / div | 0; sums[x] += src[add + x] - src[sub + x]; }
+  }
+}
+function blur(plane, w, h, r, passes) {       // 2 passes give a smooth, Gaussian-like blur
+  var tmp = new Uint8ClampedArray(plane.length), out = new Uint8ClampedArray(plane.length), cur = plane;
+  for (var p = 0; p < passes; p++) { blurH(cur, tmp, w, h, r); blurV(tmp, out, w, h, r); cur = out; }
+  return out;
+}
+
+// Step A: denoise. Blends each pixel toward its blurred version, but only where the
+// difference is small (noise). Strong edges are left alone so they stay sharp.
+function denoise(d, w, h, amt, r) {
+  var n = w * h, plane = new Uint8ClampedArray(n), thr = 20 + 20 * amt, i;
+  for (var c = 0; c < 3; c++) {
+    for (i = 0; i < n; i++) plane[i] = d[i * 4 + c];
+    var bl = blur(plane, w, h, r, 2);
+    for (i = 0; i < n; i++) {
+      var diff = bl[i] - plane[i], ad = diff < 0 ? -diff : diff, keep = 1 - ad / thr;
+      if (keep > 0) d[i * 4 + c] = plane[i] + diff * amt * keep;
+    }
+  }
+}
+
+// Step B: brightness, contrast, saturation.
+// Built with curves that keep pure black and pure white fixed, so dark and bright
+// areas are not crushed or blown out (this is what keeps the result natural).
+//   brightness : gamma curve        (lifts or lowers the midtones)
+//   contrast   : smooth S-curve     (more contrast in the middle, gentle at the ends)
+//   saturation : stops at the colour limit so colours never clip or shift hue
+function toneCurve(p) {
+  var lut = new Float32Array(256), gam = Math.pow(2, -p.bright / 80), c = p.contrast / 100, i, x, y;
+  for (i = 0; i < 256; i++) {
+    x = Math.pow(i / 255, gam);                                           // brightness
+    if (c > 0) {
+      var t = Math.min(2, c * 1.8), k1 = Math.min(1, t);
+      y = x + k1 * (x * x * (3 - 2 * x) - x);                             // S-curve
+      if (t > 1) y = y + (t - 1) * (y * y * (3 - 2 * y) - y);             // stronger S-curve for high values
+      x = y;
+    } else if (c < 0) x = 0.5 + (x - 0.5) * (1 + c);                      // flatten
+    lut[i] = x * 255;
+  }
+  return lut;
+}
+function tone(d, n, p) {
+  var lut = toneCurve(p), s = 1 + p.sat / 100;
+  for (var i = 0, j = 0; i < n; i++, j += 4) {
+    var r = lut[d[j]], g = lut[d[j + 1]], b = lut[d[j + 2]];
+    if (s !== 1) {
+      var gray = 0.299 * r + 0.587 * g + 0.114 * b, m = s, dr = r - gray, dg = g - gray, db = b - gray, q;
+      if (s > 1) {                                                        // limit so no channel goes past 0 or 255
+        if (dr > 0) { q = (255 - gray) / dr; if (q < m) m = q; } else if (dr < 0) { q = gray / -dr; if (q < m) m = q; }
+        if (dg > 0) { q = (255 - gray) / dg; if (q < m) m = q; } else if (dg < 0) { q = gray / -dg; if (q < m) m = q; }
+        if (db > 0) { q = (255 - gray) / db; if (q < m) m = q; } else if (db < 0) { q = gray / -db; if (q < m) m = q; }
+        if (m < 1) m = 1;
+      }
+      r = gray + dr * m; g = gray + dg * m; b = gray + db * m;
+    }
+    d[j] = r; d[j + 1] = g; d[j + 2] = b;
+  }
+}
+
+// Step C: local contrast + sharpening. Works on brightness (luminance) only, so
+// colours do not shift. Three pieces:
+//   1) local contrast : big-radius "unsharp mask" (pixel minus its wide blur)
+//   2) unsharp mask   : small-radius sharpening of edges
+//   3) 3x3 sharpen convolution kernel  [ 0 -a 0 / -a 1+4a -a / 0 -a 0 ]  for fine edges
+// Noise guard: tiny differences are boosted less. Halo guard: change is capped (LIMIT).
+function detail(d, w, h, p, S, dil) {
+  var n = w * h, Y = new Uint8ClampedArray(n), i, j;
+  for (i = 0, j = 0; i < n; i++, j += 4) Y[i] = 0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2];
+  var lAmt = p.local / 100 * 0.8, uAmt = p.sharp / 100 * 1.1, kAmt = p.sharp / 100 * 0.18, LIMIT = 48;
+  var BL = lAmt > 0 ? blur(Y, w, h, Math.max(6, Math.round(Math.max(w, h) * 0.02)), 2) : null;
+  var BS = uAmt > 0 ? blur(Y, w, h, Math.max(1, Math.round(2 * S)), 2) : null;
+  for (var y = 0; y < h; y++) {
+    var row = y * w, up = (y >= dil ? y - dil : 0) * w, dn = (y + dil < h ? y + dil : h - 1) * w;
+    for (var x = 0; x < w; x++) {
+      var k = row + x, v = Y[k], delta = 0;
+      if (BL) { var tt = v / 255; delta += lAmt * (v - BL[k]) * (0.25 + 3 * tt * (1 - tt)); }   // weaker in very dark / very bright areas
+      if (BS) {
+        var t = v - BS[k], a = t < 0 ? -t : t;
+        delta += uAmt * t * (a >= 6 ? 1 : a / 6);
+        var xl = x >= dil ? x - dil : 0, xr = x + dil < w ? x + dil : w - 1;
+        var lap = 4 * v - Y[row + xl] - Y[row + xr] - Y[up + x] - Y[dn + x], la = lap < 0 ? -lap : lap;
+        delta += kAmt * lap * (la >= 12 ? 1 : la / 12);
+      }
+      if (delta > LIMIT) delta = LIMIT; else if (delta < -LIMIT) delta = -LIMIT;
+      j = k * 4; d[j] += delta; d[j + 1] += delta; d[j + 2] += delta;
+    }
+  }
+}
+
+function isIdentity(p) { return !(p.sharp || p.local || p.bright || p.contrast || p.sat || p.denoise); }
+
+// Runs all steps on an ImageData (changes it in place). Filter sizes grow with the
+// picture size, so the small preview and the big download look the same.
+function enhance(img, p) {
+  if (isIdentity(p)) return;
+  var w = img.width, h = img.height, d = img.data, S = Math.max(w, h) / PREVIEW_LONG;
+  if (p.denoise > 0) denoise(d, w, h, p.denoise / 100, Math.max(1, Math.round(1.5 * S)));
+  if (p.bright || p.contrast || p.sat) tone(d, w * h, p);
+  if (p.local > 0 || p.sharp > 0) detail(d, w, h, p, S, Math.max(1, Math.round(S)));
+}
+
+// "Auto Enhance": looks at the photo's brightness and contrast and picks slider values.
+function autoSettings(data) {
+  var d = data, n = d.length / 4, hist = new Uint32Array(256), sum = 0, i, y;
+  for (i = 0; i < d.length; i += 4) { y = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) | 0; hist[y]++; sum += y; }
+  var mean = sum / n, acc = 0, lo = 0, hi = 255;
+  for (i = 0; i < 256; i++) { acc += hist[i]; if (acc >= n * 0.01) { lo = i; break; } }
+  acc = 0;
+  for (i = 255; i >= 0; i--) { acc += hist[i]; if (acc >= n * 0.01) { hi = i; break; } }
+  var spread = Math.max(hi - lo, 60);
+  var contrast = spread < 215 ? Math.min(35, Math.round((235 / spread - 1) * 60)) : 0;
+  var bright = Math.max(-30, Math.min(30, Math.round(118 - mean)));
+  return { sharp: 45, local: 25, bright: bright, contrast: contrast, sat: 10, denoise: 12 };
+}
+
+/* ---------------- 3. SCREEN ---------------- */
+var $ = function (id) { return document.getElementById(id); };
+var KEYS = ['sharp', 'local', 'bright', 'contrast', 'sat', 'denoise'];
+var IDS = { sharp: 'enSharp', local: 'enLocal', bright: 'enBright', contrast: 'enContrast', sat: 'enSat', denoise: 'enDenoise' };
+var el = {
+  drop: $('enDrop'), pick: $('enPick'), file: $('enFile'), info: $('enInfo'), msg: $('enMsg'),
+  box: $('enBox'), ph: $('enPh'), before: $('enBefore'), after: $('enAfter'), line: $('enLine'), pos: $('enPos'),
+  busy: $('enBusy'), busyTxt: $('enBusyTxt'), dl: $('enDl'), fmt: $('enFmt'), size: $('enSize')
+};
+if (!el.drop) return;
+var bctx = el.before.getContext('2d', { willReadFrequently: true });
+var actx = el.after.getContext('2d', { willReadFrequently: true });
+
+var work = null;            // the photo (canvas), reduced only if it is huge
+var baseData = null;        // original preview pixels (ImageData)
+var fileName = 'photo';
+var ready = false, scale = 1, pos = 50;
+var working = false, dirty = false, liveTimer = null, busyTimer = null;
+
+function say(text, kind) { el.msg.textContent = text || ''; el.msg.className = 'amsg' + (kind ? ' ' + kind : ''); }
+function sizeText(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'; }
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+
+function busyOn(text, now) {
+  clearTimeout(busyTimer); el.busyTxt.textContent = text || 'Processing...';
+  if (now) el.busy.classList.add('on'); else busyTimer = setTimeout(function () { el.busy.classList.add('on'); }, 150);
+}
+function busyOff() { clearTimeout(busyTimer); el.busy.classList.remove('on'); }
+
+/* --- check the chosen file --- */
+function problem(f) {
+  if (!f) return 'No image selected. Please choose a photo first.';
+  var okType = TYPES.indexOf(f.type) >= 0 || (!f.type && /\.(jpe?g|png|webp)$/i.test(f.name));
+  if (!okType) return 'Unsupported file type. Please use a JPG, PNG or WebP image.';
+  if (f.size === 0) return 'This file is empty. Please choose another photo.';
+  if (f.size > MAX_BYTES) return 'File too large (' + sizeText(f.size) + '). The maximum size is ' + sizeText(MAX_BYTES) + '.';
+  return '';
+}
+
+/* --- read the photo and prepare the preview --- */
+function loadFile(f) {
+  say('');
+  var p = problem(f);
+  if (p) { say(p, 'err'); return; }
+  var url = URL.createObjectURL(f), img = new Image();
+  img.onload = function () {
+    URL.revokeObjectURL(url);
+    try { start(img, f); } catch (e) { console.error(e); say('Image processing failed. The photo may be too large for this browser. Try a smaller photo.', 'err'); }
+  };
+  img.onerror = function () { URL.revokeObjectURL(url); say('This image could not be read. The file may be damaged. Please try another photo.', 'err'); };
+  img.src = url;
+}
+
+function start(img, f) {
+  var nw = img.naturalWidth, nh = img.naturalHeight;
+  if (!nw || !nh) { say('This image could not be read. Please try another photo.', 'err'); return; }
+  if (nw * nh > MAX_SOURCE_PIXELS) { say('The picture is too large (' + nw + ' x ' + nh + ' pixels). Please use a smaller photo.', 'err'); return; }
+  var k = Math.min(1, MAX_LONG_SIDE / Math.max(nw, nh), Math.sqrt(MAX_OUTPUT_PIXELS / (nw * nh)));
+  var ww = Math.max(1, Math.round(nw * k)), wh = Math.max(1, Math.round(nh * k));
+  var c = document.createElement('canvas'); c.width = ww; c.height = wh;
+  var cx = c.getContext('2d'); cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
+  cx.drawImage(img, 0, 0, ww, wh);
+  var pk = Math.min(1, PREVIEW_LONG / Math.max(ww, wh)), pw = Math.max(1, Math.round(ww * pk)), ph = Math.max(1, Math.round(wh * pk));
+  el.before.width = el.after.width = pw; el.before.height = el.after.height = ph;
+  bctx.imageSmoothingQuality = 'high'; bctx.drawImage(c, 0, 0, pw, ph);
+  baseData = bctx.getImageData(0, 0, pw, ph);
+  actx.putImageData(baseData, 0, 0);
+  work = c; fileName = f.name.replace(/\.[^.]+$/, '').replace(/[^\w\-]+/g, '_') || 'photo'; ready = true;
+
+  var ratio = pw / ph;                                   // fit the comparison box to the photo
+  el.box.style.aspectRatio = pw + ' / ' + ph;
+  el.box.style.width = 'min(100%, ' + (70 * ratio).toFixed(2) + 'vh)';
+  el.box.removeAttribute('data-empty'); el.ph.hidden = true; el.before.hidden = false; el.after.hidden = false;
+
+  KEYS.forEach(function (key) { $(IDS[key]).disabled = false; });
+  setParams(DEFAULTS); markPreset(null); setScale(1); setPos(50);
+  el.info.innerHTML = '';
+  var b = document.createElement('b'); b.textContent = f.name;
+  el.info.appendChild(b);
+  el.info.appendChild(document.createTextNode(' (' + sizeText(f.size) + ', ' + nw + ' x ' + nh + ' px)' + (k < 1 ? ' - reduced to ' + ww + ' x ' + wh + ' for processing' : '')));
+  say('Photo loaded. Pick a preset or move a slider.', 'ok');
+}
+
+/* --- sliders --- */
+function readParams() { var p = {}; KEYS.forEach(function (key) { p[key] = +$(IDS[key]).value; }); return p; }
+function setParams(p) { KEYS.forEach(function (key) { $(IDS[key]).value = p[key]; $(IDS[key] + 'V').textContent = p[key]; }); }
+function markPreset(name) {
+  document.querySelectorAll('#aiph [data-preset]').forEach(function (b) { b.classList.toggle('on', b.dataset.preset === name && name !== 'reset'); });
+}
+KEYS.forEach(function (key) {
+  $(IDS[key]).addEventListener('input', function () { $(IDS[key] + 'V').textContent = this.value; markPreset(null); schedule(); });
+});
+function schedule() { clearTimeout(liveTimer); liveTimer = setTimeout(runPreview, LIVE_DELAY); }
+
+/* --- presets --- */
+document.querySelectorAll('#aiph [data-preset]').forEach(function (b) {
+  b.addEventListener('click', function () {
+    if (!ready) { say('No image selected. Please choose a photo first.', 'err'); return; }
+    var name = b.dataset.preset;
+    if (name === 'reset') { setParams(DEFAULTS); setScale(1); }
+    else setParams(name === 'auto' ? autoSettings(baseData.data) : PRESETS[name]);
+    markPreset(name); say(''); clearTimeout(liveTimer); runPreview();
+  });
+});
+
+/* --- scale (Original, 1.5x, 2x) and output size --- */
+function outSize() {
+  var f = Math.min(scale, Math.sqrt(MAX_OUTPUT_PIXELS / (work.width * work.height)));
+  return { w: Math.round(work.width * f), h: Math.round(work.height * f), limited: f < scale - 0.001 };
+}
+function showSize() {
+  if (!ready) { el.size.textContent = ''; return; }
+  var s = outSize();
+  el.size.textContent = 'Download size: ' + s.w + ' x ' + s.h + ' px' + (s.limited ? ' (limited to about 16 megapixels to protect your browser)' : '');
+}
+function setScale(v) {
+  scale = v;
+  document.querySelectorAll('#aiph [data-scale]').forEach(function (b) { var on = +b.dataset.scale === v; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
+  showSize();
+}
+document.querySelectorAll('#aiph [data-scale]').forEach(function (b) { b.addEventListener('click', function () { setScale(+b.dataset.scale); }); });
+
+/* --- live preview (small copy of the photo, so sliders feel fast) --- */
+async function runPreview() {
+  if (!ready) return;
+  if (working) { dirty = true; return; }
+  working = true; dirty = false; busyOn('Enhancing...', false);
+  try {
+    await sleep(20);                                                  // let the loading state appear
+    var copy = new ImageData(new Uint8ClampedArray(baseData.data), baseData.width, baseData.height);
+    enhance(copy, readParams());
+    actx.putImageData(copy, 0, 0);
+  } catch (e) { console.error(e); say('Image processing failed. Please try a smaller photo or another browser.', 'err'); }
+  finally { working = false; busyOff(); if (dirty) runPreview(); }
+}
+
+/* --- before / after slider --- */
+function setPos(v) {
+  pos = clamp(v, 0, 100);
+  el.after.style.clipPath = 'inset(0 0 0 ' + pos + '%)';             // enhanced photo is shown on the RIGHT of the line
+  el.line.style.left = pos + '%'; el.pos.value = pos;
+  var mode = pos >= 99.5 ? 'before' : pos <= 0.5 ? 'after' : 'split';
+  document.querySelectorAll('#aiph [data-view]').forEach(function (b) { var on = b.dataset.view === mode; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
+}
+el.pos.addEventListener('input', function () { setPos(+this.value); });
+document.querySelectorAll('#aiph [data-view]').forEach(function (b) {
+  b.addEventListener('click', function () { setPos(b.dataset.view === 'before' ? 100 : b.dataset.view === 'after' ? 0 : 50); });
+});
+var dragging = false;
+function moveFrom(e) { var r = el.box.getBoundingClientRect(); if (r.width > 0) setPos((e.clientX - r.left) / r.width * 100); }
+el.box.addEventListener('pointerdown', function (e) { if (!ready) return; dragging = true; try { el.box.setPointerCapture(e.pointerId); } catch (x) { } moveFrom(e); });
+el.box.addEventListener('pointermove', function (e) { if (dragging) moveFrom(e); });
+['pointerup', 'pointercancel'].forEach(function (n) { el.box.addEventListener(n, function () { dragging = false; }); });
+
+/* --- download the full-size result --- */
+async function download() {
+  if (!ready) { say('No image selected. Please choose a photo first.', 'err'); return; }
+  while (working) await sleep(30);                                    // wait for a running preview
+  working = true; clearTimeout(liveTimer); say(''); busyOn('Creating full-size image...', true); el.dl.disabled = true;
+  var c = null;
+  try {
+    await sleep(40);
+    var s = outSize();
+    c = document.createElement('canvas'); c.width = s.w; c.height = s.h;
+    var cx = c.getContext('2d', { willReadFrequently: true });
+    cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
+    cx.drawImage(work, 0, 0, s.w, s.h);                               // 1) scale
+    var id = cx.getImageData(0, 0, s.w, s.h);
+    enhance(id, readParams());                                        // 2) enhance
+    cx.putImageData(id, 0, 0);
+    var jpg = el.fmt.value === 'jpg', out = c;
+    if (jpg) {                                                        // JPG has no transparency: put the photo on white
+      out = document.createElement('canvas'); out.width = s.w; out.height = s.h;
+      var ox = out.getContext('2d'); ox.fillStyle = '#fff'; ox.fillRect(0, 0, s.w, s.h); ox.drawImage(c, 0, 0);
+    }
+    var blob = await new Promise(function (res) { out.toBlob(res, jpg ? 'image/jpeg' : 'image/png', JPG_QUALITY); });
+    if (!blob) throw new Error('The browser could not create the file');
+    var a = document.createElement('a'), url = URL.createObjectURL(blob);
+    a.href = url; a.download = fileName + '-enhanced.' + (jpg ? 'jpg' : 'png');
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+    if (out !== c) { out.width = 0; }
+    say('Downloaded ' + a.download + ' (' + s.w + ' x ' + s.h + ' px, ' + sizeText(blob.size) + ').', 'ok');
+  } catch (e) {
+    console.error(e); say('Image processing failed. Try a smaller photo, a smaller scale, or another browser.', 'err');
+  } finally {
+    if (c) c.width = 0;
+    working = false; busyOff(); el.dl.disabled = false; if (dirty) runPreview();
+  }
+}
+
+/* --- wire up the upload area and buttons --- */
+el.pick.addEventListener('click', function (e) { e.stopPropagation(); el.file.click(); });
+el.drop.addEventListener('click', function () { el.file.click(); });
+el.drop.addEventListener('keydown', function (e) { if ((e.key === 'Enter' || e.key === ' ') && e.target === el.drop) { e.preventDefault(); el.file.click(); } });
+el.file.addEventListener('change', function () { var f = el.file.files && el.file.files[0]; el.file.value = ''; if (f) loadFile(f); else say('No image selected. Please choose a photo first.', 'err'); });
+['dragenter', 'dragover'].forEach(function (n) { el.drop.addEventListener(n, function (e) { e.preventDefault(); el.drop.classList.add('over'); }); });
+['dragleave', 'drop'].forEach(function (n) { el.drop.addEventListener(n, function (e) { e.preventDefault(); el.drop.classList.remove('over'); }); });
+el.drop.addEventListener('drop', function (e) { if (e.dataTransfer && e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]); });
+el.dl.addEventListener('click', download);
+setPos(50);
+})();
+</script>
+
+<script>
+/* Tool switcher: "Remove Background" / "Unblur & Enhance" inside the AI Photoshop page */
+(function () {
+  var btns = document.querySelectorAll('#aiph [data-ait]');
+  btns.forEach(function (b) {
+    b.addEventListener('click', function () {
+      btns.forEach(function (x) { var on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-pressed', on); });
+      var bg = document.getElementById('aiToolBg'), en = document.getElementById('aiToolEn');
+      if (bg) bg.hidden = b.dataset.ait !== 'bg';
+      if (en) en.hidden = b.dataset.ait !== 'en';
+    });
+  });
+})();
+</script>
+
+</main>
+<footer>&copy; Binjal Halwai NewsPortal. Unblur &amp; Enhance runs entirely in your browser. Remove Background sends the image to an online service, so avoid confidential images. Nothing on this page is investment advice.</footer>
+<script>
+document.getElementById('bTheme').addEventListener('click',function(){
+  var n=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';
+  document.documentElement.setAttribute('data-theme',n);
+  try{localStorage.setItem('aiph_theme',n)}catch(e){}
+});
+</script>
+</body>
+</html>

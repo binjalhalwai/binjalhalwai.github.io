@@ -1953,9 +1953,12 @@ const find=q=>{q=String(q||'').trim().toUpperCase();return R.find(r=>String(r[CO
   });
 })();
 
+/* helpers shared with the CALCULATORS tab (same company data, no second database) */
+window.NNH_DATA={find:find,g:g,fmt:fmt,esc:esc,date:D.date,go:v=>go(v)};
+
 /* ---------- tabs ---------- */
 const nav=document.createElement('nav');nav.className='vtabs';nav.setAttribute('aria-label','Sections');
-nav.innerHTML='<button class="on" data-v="n">NEWS PORTAL<em>LATEST</em></button><button data-v="scr">STOCK SCREENER</button>';
+nav.innerHTML='<button class="on" data-v="n">NEWS PORTAL<em>LATEST</em></button><button data-v="scr">STOCK SCREENER</button><button data-v="calc">CALCULATORS</button><button data-v="aiph">AI PHOTOSHOP</button>';
 const sub=document.createElement('nav');sub.className='vtabs sub';sub.setAttribute('aria-label','Stock screener tools');sub.hidden=true;
 sub.innerHTML=[['v-mkt','MARKET'],['v-s','SCREENER'],['v-map','HEATMAP'],['v-sig','SIGNALS'],['v-val','VALUATION'],['v-qua','QUALITY'],['v-div','DIVIDENDS'],['v-cmp','COMPARE'],['v-360','STOCK 360'],['v-bnk','BANKING'],['v-hyd','HYDROPOWER'],['v-wch','WATCHLIST']]
  .map(a=>`<button data-v="${a[0]}">${a[1]}</button>`).join('');
@@ -1963,17 +1966,23 @@ const top=document.querySelector('.top');
 if(top){top.after(nav);nav.after(sub)}else{document.body.prepend(sub);document.body.prepend(nav)}
 let curV='n',lastSub='v-mkt';
 function go(v){
+  const calc=(v==='calc'),aip=(v==='aiph');
   if(v==='scr')v=lastSub;                       // STOCK SCREENER tab -> reopen the last tool used
-  if(v!=='n'&&!sub.querySelector(`[data-v="${v}"]`))return;
+  if(v!=='n'&&!calc&&!aip&&!sub.querySelector(`[data-v="${v}"]`))return;
   const news=(v==='n');
-  if(!news)lastSub=v;
-  nav.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x.dataset.v===(news?'n':'scr')));
-  sub.hidden=news;
+  if(!news&&!calc&&!aip)lastSub=v;
+  nav.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x.dataset.v===(news?'n':calc?'calc':aip?'aiph':'scr')));
+  sub.hidden=news||calc||aip;
   sub.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x.dataset.v===v));
+  const cn=document.getElementById('calc-nav');if(cn)cn.hidden=!calc;
   ['.stats','.lay'].forEach(q=>{const el=document.querySelector(q);if(el)el.style.display=news?'':'none'});
-  const sec=document.getElementById('scr');if(sec)sec.hidden=news;
+  const sec=document.getElementById('scr');if(sec)sec.hidden=news||calc||aip;
+  const ap=document.getElementById('aiph');if(ap)ap.hidden=!aip;
+  const cs=document.getElementById('calc');if(cs)cs.hidden=!calc;
   curV=v;
-  if(!news){document.querySelectorAll('#scr .subv').forEach(el=>{el.hidden=(el.id!==v)});renderView()}
+  if(calc){if(window.NNH_CALC)window.NNH_CALC.show()}
+  else{try{if(/^#calc/.test(location.hash))history.replaceState(null,'',location.pathname+location.search)}catch(e){}}
+  if(!news&&!calc&&!aip){document.querySelectorAll('#scr .subv').forEach(el=>{el.hidden=(el.id!==v)});renderView()}
   window.scrollTo(0,0);
 }
 nav.onclick=sub.onclick=e=>{const b=e.target.closest('button');if(b)go(b.dataset.v)};
@@ -2258,6 +2267,1952 @@ $('#scp').innerHTML=C.filter(c=>c!=='#').map(c=>`<label><input type="checkbox" d
 
 
 # --------------------------------------------------------------------------------------
+# CALCULATORS tab (v1.4): third main tab, injected after SCREENER_BLOCK so it can reuse its
+# find()/g()/fmt() helpers through window.NNH_DATA. To add a calculator, add one entry to the
+# CALCS registry in the UI script below (and its pure engine function in the engines script).
+# --------------------------------------------------------------------------------------
+CALCULATORS_BLOCK = r'''<style>
+#calc{padding:12px 16px 28px;max-width:1200px;margin:0 auto;min-width:0}
+#calc[hidden],#calc-nav[hidden]{display:none!important}
+#calc .chead h2{margin:4px 0 4px;font-size:20px}
+#calc .chead p{margin:0 0 12px;color:var(--mu);font-size:13px;max-width:80ch}
+#calc h3{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--mu)}
+#calc .csec{margin:14px 0 6px;font-size:12px;color:var(--mu);text-transform:uppercase;letter-spacing:.04em}
+#calc .cgrid{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:14px;align-items:start}
+#calc .cgrid.even{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:820px){#calc .cgrid,#calc .cgrid.even{grid-template-columns:minmax(0,1fr)}}
+#calc .cc{background:var(--p);border:1px solid var(--ln);border-radius:8px;padding:14px;min-width:0}
+#calc .fld{margin:0 0 10px;min-width:0}
+#calc .fld[hidden]{display:none}
+#calc label{display:block;font-size:12px;font-weight:600;margin:0 0 4px}
+#calc .hint{font-weight:400;color:var(--mu)}
+#calc input:not([type=checkbox]),#calc select{width:100%;background:var(--p);color:var(--tx);border:1px solid var(--ln);border-radius:6px;padding:6px 10px;min-height:38px;font:inherit;box-sizing:border-box}
+#calc input[readonly]{background:var(--ch)}
+#calc input:focus-visible,#calc select:focus-visible,#calc button:focus-visible,#calc summary:focus-visible{outline:2px solid var(--ac);outline-offset:1px}
+#calc label.chk{display:flex;gap:8px;align-items:center;font-weight:600;margin:10px 0}
+#calc label.chk input{width:auto;min-height:0}
+#calc .row3{display:grid;grid-template-columns:1fr 1.4fr 1fr;gap:8px}
+#calc .chips,#calc .seg{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+#calc .chip,#calc .cbtn{background:var(--p);color:var(--tx);border:1px solid var(--ln);border-radius:16px;padding:5px 12px;min-height:32px;font:inherit;font-size:12px;cursor:pointer}
+#calc .cbtn{border-radius:6px;min-height:36px}
+#calc .cbtn.small{min-height:28px;padding:2px 10px}
+#calc .chip:hover,#calc .cbtn:hover{border-color:var(--ac);color:var(--ac)}
+#calc .chip.on{background:var(--ac);color:var(--onac);border-color:transparent}
+#calc .cact{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+#calc .fx{margin-top:6px}
+#calc .symmsg{font-size:11px;color:var(--mu);min-height:1em}
+#calc .chd{border-bottom:1px solid var(--ln);padding-bottom:10px;margin-bottom:12px}
+#calc .chd small{color:var(--mu);font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+#calc .cbig{font-size:clamp(22px,4vw,32px);font-weight:700;line-height:1.2;font-variant-numeric:tabular-nums}
+#calc .csub{color:var(--mu);font-size:12px;margin-top:2px}
+#calc .csub b{color:var(--tx)}
+#calc .cs{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:0 0 6px}
+#calc .cs>div{background:var(--ch);border:1px solid var(--ln);border-top:3px solid var(--ac2);border-radius:8px;padding:8px 12px;min-width:0}
+#calc .cs small{display:block;color:var(--mu);font-size:10px;text-transform:uppercase;letter-spacing:.04em}
+#calc .cs b{display:block;font-size:15px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+#calc .cs.tiles{grid-template-columns:repeat(4,minmax(0,1fr))}
+#calc .cs.tiles b{font-size:22px}
+@media(max-width:520px){#calc .cs.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}#calc .cs{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}}
+#calc .u{color:var(--ok)}#calc .d{color:var(--bad)}
+#calc .badge{display:inline-block;border-radius:6px;padding:1px 8px;font-size:11px;font-weight:700;background:var(--ch);border:1px solid var(--ln)}
+#calc .badge.ok{color:var(--ok);border-color:var(--ok)}#calc .badge.wa{color:var(--wa);border-color:var(--wa)}#calc .badge.bad{color:var(--bad);border-color:var(--bad)}
+#calc .ct{overflow:auto;max-height:60vh;border:1px solid var(--ln);border-radius:8px;margin:6px 0;-webkit-overflow-scrolling:touch}
+#calc table{border-collapse:collapse;width:100%;font-size:12px}
+#calc th{position:sticky;top:0;background:var(--ch);text-align:right;padding:7px 9px;white-space:nowrap;border-bottom:1px solid var(--ln);font-size:11px}
+#calc td{padding:6px 9px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--ln);font-variant-numeric:tabular-nums}
+#calc th:first-child,#calc td:first-child{text-align:left}
+#calc table.avt td{padding:4px 6px}#calc table.avt input,#calc table.avt select{min-width:84px}
+#calc .ckv{display:grid;grid-template-columns:1fr auto;gap:4px 14px;font-size:12px}
+#calc .ckv span:nth-child(odd){color:var(--mu)}#calc .ckv span:nth-child(even){text-align:right;font-variant-numeric:tabular-nums}
+#calc .ckv.one{grid-template-columns:1fr auto}
+#calc .cwarn{background:var(--ch);border:1px solid var(--ln);border-left:3px solid var(--wa);border-radius:6px;padding:8px 12px;margin:0 0 12px;font-size:12px}
+#calc .cerr{background:var(--ch);border:1px solid var(--bad);border-radius:6px;padding:8px 12px;font-size:13px;color:var(--bad)}
+#calc .cnote,#calc .cdisc,#calc .cmu{color:var(--mu);font-size:12px}
+#calc .cnote{margin-top:12px}#calc .cdisc{margin-top:14px;border-top:1px solid var(--ln);padding-top:10px}
+#calc .cnotes{margin:8px 0 0;padding-left:18px;font-size:12px;color:var(--mu)}
+#calc details.cdet{margin:10px 0;font-size:12px;color:var(--mu)}#calc details.cdet summary{cursor:pointer;font-weight:600;color:var(--tx)}
+#calc svg.chart{width:100%;height:auto;display:block;margin-top:12px}#calc svg.chart text{fill:var(--mu)}#calc svg.chart line{stroke:var(--ln)}
+#calc .legend{display:flex;gap:14px;font-size:11px;color:var(--mu);margin:4px 0 10px}#calc .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px}
+#calc .swap{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:8px;align-items:end;margin-bottom:10px}
+#calc .res{margin-top:12px;min-height:3.2em}
+#calc .todaybox{margin-bottom:10px}
+#calc .gh{margin:18px 0 8px;font-size:14px;text-transform:none;letter-spacing:0;color:var(--tx)}#calc .gh small{font-weight:400;color:var(--mu);font-size:12px;margin-left:6px}
+#calc .ovg{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr));gap:10px}
+#calc .ovc{text-align:left;background:var(--p);color:var(--tx);border:1px solid var(--ln);border-radius:8px;padding:12px;cursor:pointer;font:inherit;display:flex;flex-direction:column;gap:4px;min-height:64px}
+#calc .ovc:hover{border-color:var(--ac)}#calc .ovc b{font-size:13px}#calc .ovc span{font-size:12px;color:var(--mu)}
+@media(max-width:640px){#calc{padding:10px 8px 24px}#calc input:not([type=checkbox]),#calc select{font-size:16px;min-height:42px}#calc .row3{grid-template-columns:1fr}}
+#calc-nav.vtabs{display:block;overflow:visible;white-space:normal;padding:8px 14px}#calc-nav[hidden]{display:none!important}
+#calc-nav .cn-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}#calc-nav .cn-row[hidden]{display:none}
+#calc-nav #cn-groups button{font-size:12px;font-weight:700;padding:5px 14px}
+#calc-nav .cn-sub{margin-top:8px;padding:8px 0 0;border-top:1px dashed var(--ln)}#calc-nav .cn-sub button{font-size:11px;font-weight:600;background:var(--p2);min-height:28px}#calc-nav .cn-sub button.on{background:var(--ac)}#calc-nav .cn-sub button[hidden]{display:none}
+@media(max-width:480px){.vtabs:not(.sub){display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:8px 8px 0;overflow:visible}.vtabs:not(.sub) button{padding:9px 7px;font-size:11px;text-align:center;border-radius:8px}.vtabs:not(.sub) em{margin-left:4px;padding:1px 4px}#calc-nav.vtabs{padding:8px 8px}#calc-nav .cn-row{gap:5px}#calc-nav #cn-groups button{padding:5px 10px;font-size:11px}#calc-nav .cn-sub button{padding:4px 9px}}
+#calc .nwbox{border:1px solid var(--ln);background:var(--ch);border-radius:8px;padding:10px 12px;margin:0 0 8px}#calc .nwh{display:flex;justify-content:space-between;align-items:center;gap:8px}#calc .nwh small{color:var(--mu);font-size:10px;text-transform:uppercase;letter-spacing:.04em}#calc .nwtxt{font-size:16px;font-weight:600;line-height:1.5;margin-top:4px;overflow-wrap:anywhere}#calc .nwtxt[lang=ne]{font-size:17px}
+#calc .lbrow{display:flex;align-items:center;justify-content:space-between;gap:6px}#calc .lbrow label{margin:0 0 4px}
+#calc .tipbtn{flex:0 0 auto;width:22px;height:22px;min-height:22px;border-radius:50%;border:1px solid var(--ln);background:var(--ch);color:var(--ac);font:700 12px/1 inherit;cursor:pointer;padding:0}
+#calc .tipbtn:hover{border-color:var(--ac)}#calc .tipbox{background:var(--ch);border:1px solid var(--ln);border-radius:6px;padding:6px 10px;margin:0 0 6px;font-size:12px;color:var(--mu)}#calc .tipbox[hidden]{display:none}
+#calc .cbtn.primary{background:var(--ac);color:var(--onac);border-color:transparent}#calc .cbtn.primary:hover{color:var(--onac);filter:brightness(1.08)}
+#calc .cform{margin-top:14px;padding:10px 12px;border:1px solid var(--ln);border-radius:8px;font-size:12px;color:var(--mu)}#calc .cform b{color:var(--tx)}#calc .cform ul{margin:6px 0 0;padding-left:18px}#calc .cform li{margin:2px 0}
+#calc .cwarn{margin:8px 0}
+#calc details.rules{margin:0 0 12px;background:var(--p);border:1px solid var(--ln);border-radius:8px;padding:8px 14px}#calc details.rules .rg{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:4px 10px;margin-top:10px}
+#calc details.rules table input{width:110px;min-height:32px}
+</style>
+<nav class="vtabs sub" id="calc-nav" aria-label="Calculators" hidden></nav>
+<section id="calc" hidden aria-label="Calculators"><div id="calc-body"></div></section>
+<script>
+/*
+ * bs_core.js - BS (Bikram Sambat) <-> AD (Gregorian) conversion core.
+ * No dependencies. Works in browsers and Node.
+ *
+ * Method: lookup table of days per BS month (29..32), anchored at
+ *   BS 2000-01-01 = AD 1943-04-14.
+ * Data encoding: one string per BS year, 12 digits, digit = days - 28.
+ * Supported range: BS 2000-01-01 .. 2090-12-30  (AD 1943-04-14 .. 2034-04-13)
+ *
+ * OVERRIDES: put corrections here if your official patro disagrees with the table,
+ * e.g.  OVERRIDES[2062] = [31,31,31,32,31,31,29,30,29,30,29,31];
+ */
+(function (root) {
+  'use strict';
+
+  var FIRST_YEAR = 2000;
+  var LAST_YEAR = 2090;
+  var EPOCH_UTC = Date.UTC(1943, 3, 14); // AD 1943-04-14 == BS 2000-01-01
+  var DAY_MS = 86400000;
+
+  var RAW = '243432221213,334333212122,334432212122,343432221123,243432221213,334333212122,334432212122,343432221123,333433122113,334333212122,334432212122,343432221123,333433122122,334333212122,334432212122,343432221123,333433122122,334333212122,343432212122,343432221213,333433212122,334333212122,343432221122,343432221213,333433212122,334333212122,343432221123,243432221213,334333212122,334342212122,343432221123,243432221213,334333212122,334432212122,343432221123,243433122113,334333212122,334432212122,343432221123,333433122122,334333212122,334432212122,343432221123,333433122122,334333212122,343432212122,343432221123,333433212122,334333212122,343432221122,343432221213,333433212122,334333212122,343432221122,343432221213,334333212122,334342212122,343432221123,243432221213,334333212122,334432212122,343432221123,243433121213,334333212122,334432212122,343432221123,333433122113,334333212122,334432212122,343432221123,333433122122,334333212122,343432212122,343432221123,333433212122,334333212122,343432221122,343432221213,333433212122,334333212122,343432221122,343432221213,334333212122,334333212122,334332221222,343423221222,243432221222,334333221222,234423221222,243432221222,243432221222'; // replaced by build script; comma separated, one entry per year
+
+  var OVERRIDES = {};
+
+  var MONTHS_EN = ['Baisakh', 'Jestha', 'Ashadh', 'Shrawan', 'Bhadra', 'Ashwin',
+    'Kartik', 'Mangsir', 'Poush', 'Magh', 'Falgun', 'Chaitra'];
+  var MONTHS_NE = ['बैशाख', 'जेष्ठ', 'आषाढ', 'श्रावण', 'भाद्र', 'आश्विन',
+    'कार्तिक', 'मंसिर', 'पौष', 'माघ', 'फाल्गुन', 'चैत्र'];
+  var WEEKDAYS_EN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  var WEEKDAYS_NE = ['आइतबार', 'सोमबार', 'मङ्गलबार', 'बुधबार', 'बिहीबार', 'शुक्रबार', 'शनिबार'];
+
+  var yearMonths = {};   // year -> [12 ints]
+  var yearStart = {};    // year -> days since epoch at BS year start
+  var totalDays = 0;
+
+  function build() {
+    var rows = RAW.split(',');
+    var acc = 0, y, m, arr;
+    for (y = FIRST_YEAR; y <= LAST_YEAR; y++) {
+      if (OVERRIDES[y]) {
+        arr = OVERRIDES[y].slice();
+      } else {
+        var s = rows[y - FIRST_YEAR];
+        arr = [];
+        for (m = 0; m < 12; m++) arr.push(parseInt(s.charAt(m), 10) + 28);
+      }
+      yearMonths[y] = arr;
+      yearStart[y] = acc;
+      acc += arr.reduce(function (a, b) { return a + b; }, 0);
+    }
+    totalDays = acc;
+  }
+
+  function daysInMonth(y, m) {
+    if (!yearMonths[y]) throw new RangeError('BS year ' + y + ' is outside ' + FIRST_YEAR + '-' + LAST_YEAR);
+    if (m < 1 || m > 12) throw new RangeError('BS month must be 1-12');
+    return yearMonths[y][m - 1];
+  }
+
+  function utcToParts(ms) {
+    var d = new Date(ms);
+    return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate(), weekday: d.getUTCDay() };
+  }
+
+  /** BS -> AD. Throws RangeError for impossible or unsupported dates. */
+  function bsToAd(y, m, d) {
+    y = +y; m = +m; d = +d;
+    if (!(Number.isInteger(y) && Number.isInteger(m) && Number.isInteger(d))) throw new TypeError('Year, month and day must be whole numbers');
+    var dim = daysInMonth(y, m);
+    if (d < 1 || d > dim) throw new RangeError('BS ' + y + ' ' + MONTHS_EN[m - 1] + ' has ' + dim + ' days (you entered ' + d + ')');
+    var offset = yearStart[y];
+    for (var i = 0; i < m - 1; i++) offset += yearMonths[y][i];
+    offset += d - 1;
+    return utcToParts(EPOCH_UTC + offset * DAY_MS);
+  }
+
+  /** AD -> BS. Throws RangeError for invalid or unsupported dates. */
+  function adToBs(y, m, d) {
+    y = +y; m = +m; d = +d;
+    if (!(Number.isInteger(y) && Number.isInteger(m) && Number.isInteger(d))) throw new TypeError('Year, month and day must be whole numbers');
+    var t = Date.UTC(y, m - 1, d);
+    var chk = new Date(t);
+    if (chk.getUTCFullYear() !== y || chk.getUTCMonth() !== m - 1 || chk.getUTCDate() !== d) {
+      throw new RangeError('AD ' + y + '-' + m + '-' + d + ' is not a real calendar date');
+    }
+    var offset = Math.round((t - EPOCH_UTC) / DAY_MS);
+    if (offset < 0 || offset >= totalDays) {
+      throw new RangeError('AD date is outside the supported range (1943-04-14 to 2034-04-13)');
+    }
+    var lo = FIRST_YEAR, hi = LAST_YEAR;
+    while (lo < hi) { // largest year with yearStart <= offset
+      var mid = (lo + hi + 1) >> 1;
+      if (yearStart[mid] <= offset) lo = mid; else hi = mid - 1;
+    }
+    var rem = offset - yearStart[lo], mon = 0;
+    while (rem >= yearMonths[lo][mon]) { rem -= yearMonths[lo][mon]; mon++; }
+    return { year: lo, month: mon + 1, day: rem + 1, weekday: chk.getUTCDay() };
+  }
+
+  var DEV = '०१२३४५६७८९';
+  function toDevanagari(s) { return String(s).replace(/[0-9]/g, function (c) { return DEV.charAt(+c); }); }
+
+  build();
+
+  var api = {
+    FIRST_YEAR: FIRST_YEAR, LAST_YEAR: LAST_YEAR, OVERRIDES: OVERRIDES,
+    MONTHS_EN: MONTHS_EN, MONTHS_NE: MONTHS_NE, WEEKDAYS_EN: WEEKDAYS_EN, WEEKDAYS_NE: WEEKDAYS_NE,
+    daysInMonth: daysInMonth, bsToAd: bsToAd, adToBs: adToBs, toDevanagari: toDevanagari,
+    rebuild: build
+  };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.BSCore = api;
+})(typeof window !== 'undefined' ? window : this);
+
+/*
+ * age_core.js - calendar-aware age calculation for AD (Gregorian) and BS (Bikram Sambat).
+ * Depends on bs_core.js (BSCore) only for BS mode.
+ *
+ * Method ("anniversary" method, same idea as dateutil.relativedelta):
+ *   1. Find the largest whole number of months n such that DOB + n months <= target date.
+ *      Adding months keeps the day-of-month, but if the target month is shorter the day is
+ *      clamped to the month's last day (31 Jan + 1 month = 28/29 Feb).
+ *   2. years = floor(n / 12), months = n % 12, days = target - (DOB + n months).
+ * This never produces negative days, unlike the simple "borrow from previous month" method
+ * which breaks for dates such as 31 Jan -> 1 Mar.
+ *
+ * Leap-day birthdays (29 Feb) in non-leap years: jurisdictions differ, so the rule is an option:
+ *   'feb28' (default) -> anniversary falls on 28 Feb
+ *   'mar1'            -> anniversary falls on 1 Mar
+ */
+(function (root) {
+  'use strict';
+  var DAY = 86400000;
+  var BS = root.BSCore || (typeof require !== 'undefined' ? require('./bs_core.built.js') : null);
+
+  function isLeap(y) { return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0; }
+
+  var CAL = {
+    AD: {
+      dim: function (y, m) { return [31, isLeap(y) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1]; },
+      ord: function (y, m, d) { return Math.round(Date.UTC(y, m - 1, d) / DAY); } // days since 1970-01-01
+    },
+    BS: {
+      dim: function (y, m) { return BS.daysInMonth(y, m); },
+      ord: function (y, m, d) { var a = BS.bsToAd(y, m, d); return Math.round(Date.UTC(a.year, a.month - 1, a.day) / DAY); }
+    }
+  };
+
+  function weekdayOf(ord) { return (((ord + 4) % 7) + 7) % 7; } // 1970-01-01 was a Thursday (4); 0 = Sunday
+
+  function addMonths(cal, dob, n, leapRule) {
+    var total = dob.y * 12 + (dob.m - 1) + n;
+    var y = Math.floor(total / 12), m = total - y * 12 + 1;
+    var dim = cal.dim(y, m);
+    if (dob.d <= dim) return { y: y, m: m, d: dob.d };
+    if (cal === CAL.AD && leapRule === 'mar1' && dob.m === 2 && dob.d === 29) return { y: y, m: 3, d: 1 };
+    return { y: y, m: m, d: dim };
+  }
+
+  function validate(cal, p, label) {
+    if (!p || !Number.isInteger(p.y) || !Number.isInteger(p.m) || !Number.isInteger(p.d)) throw new TypeError(label + ' is not a complete date');
+    if (p.m < 1 || p.m > 12) throw new RangeError(label + ': month must be 1-12');
+    var dim = cal.dim(p.y, p.m);
+    if (p.d < 1 || p.d > dim) throw new RangeError(label + ': day must be 1-' + dim + ' for that month');
+  }
+
+  /**
+   * @param {'AD'|'BS'} calName  calendar used for entering AND counting
+   * @param {{y,m,d}} dob
+   * @param {{y,m,d}} to         date to calculate the age on
+   * @param {{leapRule?: 'feb28'|'mar1'}} [opts]
+   */
+  function calculate(calName, dob, to, opts) {
+    var cal = CAL[calName]; if (!cal) throw new TypeError('Unknown calendar ' + calName);
+    var leapRule = (opts && opts.leapRule) || 'feb28';
+    validate(cal, dob, 'Date of birth'); validate(cal, to, 'Calculation date');
+    var dobOrd = cal.ord(dob.y, dob.m, dob.d), toOrd = cal.ord(to.y, to.m, to.d);
+    if (toOrd < dobOrd) throw new RangeError('The calculation date is before the date of birth');
+
+    var ordOf = function (n) { var a = addMonths(cal, dob, n, leapRule); return cal.ord(a.y, a.m, a.d); };
+    var n = Math.max(0, (to.y - dob.y) * 12 + (to.m - dob.m));
+    while (n > 0 && ordOf(n) > toOrd) n--;
+    while (true) { // safety: try one more month only if it still fits (BS year limit ends the loop)
+      var fits = false;
+      try { fits = ordOf(n + 1) <= toOrd; } catch (e) { fits = false; }
+      if (!fits) break;
+      n++;
+    }
+    var anniv = addMonths(cal, dob, n, leapRule);
+    var years = Math.floor(n / 12), months = n % 12, days = toOrd - cal.ord(anniv.y, anniv.m, anniv.d);
+    var totalDays = toOrd - dobOrd;
+
+    var isBirthday = n > 0 && months === 0 && days === 0;
+    var next = null, daysToNext = null;
+    try {
+      next = isBirthday ? { y: to.y, m: to.m, d: to.d } : addMonths(cal, dob, (years + 1) * 12, leapRule);
+      daysToNext = cal.ord(next.y, next.m, next.d) - toOrd;
+    } catch (e) { next = null; daysToNext = null; } // beyond supported BS range
+
+    return {
+      years: years, months: months, days: days,
+      totalDays: totalDays, totalWeeks: Math.floor(totalDays / 7), extraDays: totalDays % 7, totalMonths: n,
+      bornWeekday: weekdayOf(dobOrd), isBirthday: isBirthday,
+      next: next, nextWeekday: next ? weekdayOf(cal.ord(next.y, next.m, next.d)) : null, daysToNext: daysToNext
+    };
+  }
+
+  var api = { calculate: calculate, isLeap: isLeap, CAL: CAL };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.AgeCore = api;
+})(typeof window !== 'undefined' ? window : this);
+
+/* Numbers to Words: Nepali rupees and paisa, lakh-crore system, English + Nepali (Devanagari).
+   API: NumWords.convert(input) -> { ok, english, nepali, formatted, formattedNe, rupees, paisa }  or  { ok:false, error, empty }
+   Works in the browser (window.NumWords) and in Node (module.exports). No dependencies. */
+(function (root, factory) {
+  var api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  root.NumWords = api;
+})(typeof window !== 'undefined' ? window : this, function () {
+  'use strict';
+  var EN_ONES = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+  var EN_TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+  var EN_SCALE = ['thousand', 'lakh', 'crore', 'arab', 'kharab', 'neel'];
+  /* Nepali words for 0-99 (each number has its own word) */
+  var NE = ['शून्य', 'एक', 'दुई', 'तीन', 'चार', 'पाँच', 'छ', 'सात', 'आठ', 'नौ',
+    'दश', 'एघार', 'बाह्र', 'तेह्र', 'चौध', 'पन्ध्र', 'सोह्र', 'सत्र', 'अठार', 'उन्नाइस',
+    'बीस', 'एक्काइस', 'बाइस', 'तेइस', 'चौबीस', 'पच्चीस', 'छब्बीस', 'सत्ताइस', 'अठ्ठाइस', 'उनान्तीस',
+    'तीस', 'एकतीस', 'बत्तीस', 'तेत्तीस', 'चौँतीस', 'पैँतीस', 'छत्तीस', 'सैँतीस', 'अठतीस', 'उनान्चालीस',
+    'चालीस', 'एकचालीस', 'बयालीस', 'त्रिचालीस', 'चौवालीस', 'पैंतालीस', 'छयालीस', 'सतचालीस', 'अठचालीस', 'उनान्पचास',
+    'पचास', 'एकाउन्न', 'बाउन्न', 'त्रिपन्न', 'चौवन्न', 'पचपन्न', 'छपन्न', 'सन्ताउन्न', 'अन्ठाउन्न', 'उनान्साठी',
+    'साठी', 'एकसट्ठी', 'बैसट्ठी', 'त्रिसट्ठी', 'चौंसट्ठी', 'पैंसट्ठी', 'छयसट्ठी', 'सतसट्ठी', 'अठसट्ठी', 'उनान्सत्तरी',
+    'सत्तरी', 'एकहत्तर', 'बहत्तर', 'त्रिहत्तर', 'चौहत्तर', 'पचहत्तर', 'छयहत्तर', 'सतहत्तर', 'अठहत्तर', 'उनान्असी',
+    'असी', 'एकासी', 'बयासी', 'त्रियासी', 'चौरासी', 'पचासी', 'छयासी', 'सतासी', 'अठासी', 'उनान्नब्बे',
+    'नब्बे', 'एकानब्बे', 'बयानब्बे', 'त्रियानब्बे', 'चौरानब्बे', 'पन्चानब्बे', 'छयानब्बे', 'सन्तानब्बे', 'अन्ठानब्बे', 'उनान्सय'];
+  var NE_SCALE = ['हजार', 'लाख', 'करोड', 'अरब', 'खरब', 'नील'];
+  var MAX_DIGITS = 15;
+
+  function en99(n) { return n < 20 ? EN_ONES[n] : EN_TENS[Math.floor(n / 10)] + (n % 10 ? ' ' + EN_ONES[n % 10] : ''); }
+  function en999(n) { var h = Math.floor(n / 100), r = n % 100, p = []; if (h) p.push(EN_ONES[h] + ' hundred'); if (r) p.push(en99(r)); return p.join(' '); }
+  function ne999(n) { var h = Math.floor(n / 100), r = n % 100, p = []; if (h) p.push(NE[h] + ' सय'); if (r) p.push(NE[r]); return p.join(' '); }
+
+  /* Indian grouping: last 3 digits, then 2-digit groups (thousand, lakh, crore, arab, kharab, neel) */
+  function words(n, hundreds, small, scales) {
+    if (n === 0) return '';
+    var parts = [], h = n % 1000, rest = Math.floor(n / 1000), g = [], i;
+    for (i = 0; i < scales.length && rest > 0; i++) { g.push(rest % 100); rest = Math.floor(rest / 100); }
+    for (i = g.length - 1; i >= 0; i--) if (g[i]) parts.push(small(g[i]) + ' ' + scales[i]);
+    if (h) parts.push(hundreds(h));
+    return parts.join(' ');
+  }
+  function enWords(n) { return words(n, en999, en99, EN_SCALE); }
+  function neWords(n) { return words(n, ne999, function (x) { return NE[x]; }, NE_SCALE); }
+
+  function indianGroup(intStr) {
+    if (intStr.length <= 3) return intStr;
+    var head = intStr.slice(0, -3), tail = intStr.slice(-3);
+    return head.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + ',' + tail;
+  }
+  function toNeDigits(s) { return s.replace(/\d/g, function (d) { return String.fromCharCode(0x0966 + Number(d)); }); }
+
+  function normalise(input) {
+    var s = String(input == null ? '' : input).trim();
+    s = s.replace(/[\u0966-\u096F]/g, function (c) { return String(c.charCodeAt(0) - 0x0966); });   // Devanagari digits
+    s = s.replace(/[,\s\u00A0_]/g, '').replace(/^(rs\.?|npr|nrs\.?|\u0930\u0941\.?)/i, '');
+    return s;
+  }
+
+  function convert(input) {
+    var s = normalise(input);
+    if (s === '') return { ok: false, empty: true, error: '' };
+    if (/^-\d*\.?\d*$/.test(s) && /\d/.test(s)) return { ok: false, error: 'Negative amounts are not supported.' };
+    if (!/^(\d+\.?\d*|\.\d+)$/.test(s)) return { ok: false, error: 'Please enter a valid number, e.g. 73269.77' };
+    var parts = s.split('.'), ip = (parts[0] || '0').replace(/^0+(?=\d)/, ''), fp = parts[1] || '';
+    if (ip.length > MAX_DIGITS) return { ok: false, error: 'Number is too large. Maximum supported is 15 digits (up to 99 neel).' };
+    var total = BigInt(ip) * 100n + BigInt((fp + '00').slice(0, 2));
+    if (fp.length > 2 && fp.charAt(2) >= '5') total += 1n;               // round half up to 2 decimals
+    var rupees = total / 100n, paisa = Number(total % 100n);
+    if (rupees.toString().length > MAX_DIGITS) return { ok: false, error: 'Number is too large. Maximum supported is 15 digits (up to 99 neel).' };
+    var r = Number(rupees), en, ne;
+    if (r === 0 && paisa === 0) { en = 'zero rupees'; ne = 'शून्य रुपैयाँ'; }
+    else {
+      en = (r > 0 ? enWords(r) + (r === 1 ? ' rupee' : ' rupees') : '') + (paisa ? (r > 0 ? ' and ' : '') + en99(paisa) + ' paisa' : '');
+      ne = (r > 0 ? neWords(r) + ' रुपैयाँ' : '') + (paisa ? (r > 0 ? ' र ' : '') + NE[paisa] + ' पैसा' : '');
+    }
+    en = en + ' only'; en = en.charAt(0).toUpperCase() + en.slice(1);
+    var fig = indianGroup(rupees.toString()) + '.' + (paisa < 10 ? '0' : '') + paisa;
+    return { ok: true, english: en, nepali: ne + ' मात्र', formatted: fig, formattedNe: toNeDigits(fig), rupees: r, paisa: paisa };
+  }
+  return { convert: convert, MAX_DIGITS: MAX_DIGITS };
+});
+
+/* ===== NNH calculator engines: pure functions, no DOM. Rates live in one place (RATES). ===== */
+(function (root) {
+'use strict';
+var E = {};
+function CalcError(field, message, blank) { this.name = 'CalculatorInputError'; this.field = field; this.detail = message; this.blank = !!blank; this.message = field + ': ' + message; }
+CalcError.prototype = Object.create(Error.prototype);
+E.CalcError = CalcError;
+
+function num(value, field, o) {
+  o = o || {};
+  if (value === null || value === undefined || (typeof value === 'string' && value.trim() === '')) throw new CalcError(field, 'is required', true);
+  if (typeof value === 'boolean') throw new CalcError(field, 'must be a number');
+  var n = value;
+  if (typeof value === 'string') { n = Number(value.trim().replace(/,/g, '')); }
+  if (typeof n !== 'number' || !isFinite(n)) throw new CalcError(field, 'must be a valid number');
+  var minInc = o.minInclusive !== false, maxInc = o.maxInclusive !== false;
+  if (o.min != null && (n < o.min || (n === o.min && !minInc))) throw new CalcError(field, 'must be ' + (minInc ? 'at least ' : 'greater than ') + o.min);
+  if (o.max != null && (n > o.max || (n === o.max && !maxInc))) throw new CalcError(field, 'must be ' + (maxInc ? 'at most ' : 'less than ') + o.max);
+  return n;
+}
+function int(value, field, o) { var n = num(value, field, o); if (Math.floor(n) !== n) throw new CalcError(field, 'must be a whole number'); return n; }
+/* Excel ROUND: half away from zero, decimal-text based (avoids 1.005 style errors) */
+function roundHalfUp(x, dp) {
+  if (!isFinite(x)) return x;
+  var sign = x < 0 ? -1 : 1, a = Math.abs(x);
+  if (a < 1e-6) return 0;
+  if (a >= 1e15) return sign * Math.round(a);
+  var shifted = Number(a.toPrecision(15) + 'e' + dp);
+  return sign * Number(Math.round(shifted) + 'e-' + dp);
+}
+var r2 = function (x) { return roundHalfUp(x, 2); }, r4 = function (x) { return roundHalfUp(x, 4); };
+/* INT(ROUND(x,8)): guards float noise such as 100*(1+0.15) = 114.99999999999999 */
+var floor8 = function (x) { return Math.floor(Number(x.toFixed(8))); };
+E.num = num; E.roundHalfUp = roundHalfUp;
+
+/* ---- Rates / fee schedule (single source of truth for Buy, Sell, Averaging) ---- */
+var RATES = {
+  brokerage: { slabs: [[50000, 0.0036], [500000, 0.0033], [2000000, 0.0031], [10000000, 0.0027], [Infinity, 0.0024]], minFee: 10, minFeeUpTo: 50000 },
+  sebon: 0.00015,
+  dp: 25,
+  cgt: { individual_short: 0.05, individual_long: 0.0375, institutional: 0.10 },
+  tds: 0.05,
+  /* valuation settings (editable in the Rates & rules panel) */
+  valuation: { fair_band_pct: 10, terminal_growth_warn_pct: 5, mos_strong_pct: 30, mos_moderate_pct: 10 }
+};
+E.RATES = RATES;
+E.DEFAULT_RATES = JSON.parse(JSON.stringify(RATES, function (k, v) { return v === Infinity ? '__inf__' : v; }), function (k, v) { return v === '__inf__' ? Infinity : v; });
+function brokerage(gross) {
+  var rate = 0, i;
+  for (i = 0; i < RATES.brokerage.slabs.length; i++) { if (gross <= RATES.brokerage.slabs[i][0]) { rate = RATES.brokerage.slabs[i][1]; break; } }
+  var fee = gross * rate;
+  if (gross <= RATES.brokerage.minFeeUpTo) fee = Math.max(fee, RATES.brokerage.minFee);
+  return { rate: rate, fee: fee };
+}
+E.brokerage = brokerage;
+
+/* ---- BUY ---- */
+E.calculateBuy = function (i) {
+  var price = num(i.stock_price, 'Price', { min: 0, minInclusive: false });
+  var qty = int(i.quantity, 'Quantity', { min: 1 });
+  var type = i.investor_type || 'Individual';
+  if (['Individual', 'Institutional', 'Government'].indexOf(type) < 0) throw new CalcError('Investor type', 'invalid');
+  var gross = price * qty, b = brokerage(gross), sebon = gross * RATES.sebon, dp = RATES.dp;
+  var total = gross + b.fee + sebon + dp;
+  return { gross_transaction_value: r2(gross), brokerage_rate: r2(b.rate * 100), brokerage_charge: r2(b.fee), sebon_fee: r2(sebon),
+    dp_charge: dp, total_purchase_cost: r2(total), effective_cost_per_share: r2(total / qty) };
+};
+
+/* ---- SELL ---- (cgt: optional override {individual_short, individual_long, institutional} as fractions) */
+E.calculateSell = function (i, cgtOverride) {
+  var price = num(i.sell_price, 'Sell price', { min: 0, minInclusive: false });
+  var qty = int(i.quantity, 'Quantity', { min: 1 });
+  var cost = num(i.purchase_cost_per_share, 'Purchase cost per share', { min: 0 });
+  var type = i.investor_type, hold = i.holding_period, dpOn = !!i.dp_applicable;
+  if (['Individual', 'Institutional'].indexOf(type) < 0) throw new CalcError('Investor type', 'must be Individual or Institutional');
+  if (['\u2264 365 Days', '> 365 Days'].indexOf(hold) < 0) throw new CalcError('Holding period', 'invalid');
+  var cg = cgtOverride || RATES.cgt;
+  var gross = price * qty, pcost = cost * qty, b = brokerage(gross), sebon = gross * RATES.sebon, dp = dpOn ? RATES.dp : 0;
+  var fees = b.fee + sebon + dp, before = gross - pcost - fees;
+  var rate = type === 'Institutional' ? cg.institutional : (hold === '\u2264 365 Days' ? cg.individual_short : cg.individual_long);
+  var tax = before > 0 ? before * rate : 0;
+  var net = gross - fees - tax;
+  return { gross_sales_value: r2(gross), purchase_cost: r2(pcost), brokerage_rate: r2(b.rate * 100), broker_commission: r2(b.fee), sebon_fee: r2(sebon),
+    dp_charge: dp, total_selling_fees: r2(fees), net_profit_before_cgt: r2(before), cgt_rate: r2(rate * 100), capital_gains_tax: r2(tax),
+    net_cash_received: r2(net), net_profit_after_cgt: r2(net - pcost) };
+};
+
+/* ---- AVERAGING / WACC ----
+   Secondary batches carry broker + SEBON fee; IPO and Bonus carry none.
+   Quantity: every valid batch counts (a Bonus batch adds shares at zero cost). */
+E.calculateWacc = function (batches) {
+  var rows = [], totalQty = 0, totalCost = 0;
+  batches.forEach(function (b, k) {
+    var type = b.type || 'Secondary';
+    if (['Secondary', 'IPO', 'Bonus'].indexOf(type) < 0) throw new CalcError('Batch ' + (k + 1) + ' type', 'invalid');
+    var qty = num(b.quantity, 'Batch ' + (k + 1) + ' quantity', { min: 0 });
+    var price = num(b.purchase_price, 'Batch ' + (k + 1) + ' price', { min: 0 });
+    var row = { batch_no: b.batch_no != null ? b.batch_no : k + 1, type: type, quantity: qty, purchase_price: price,
+      gross_value: 0, broker_fee: 0, sebon_fee: 0, total_investment_cost: 0, counted: false };
+    var valid = qty > 0 && (price > 0 || type === 'Bonus');
+    if (valid) {
+      var gross = qty * price, bf = 0, sf = 0;
+      if (type === 'Secondary') { bf = brokerage(gross).fee; sf = gross * RATES.sebon; }
+      row.gross_value = r2(gross); row.broker_fee = r2(bf); row.sebon_fee = r2(sf); row.total_investment_cost = r2(gross + bf + sf); row.counted = true;
+      totalQty += qty; totalCost += row.total_investment_cost;
+    }
+    rows.push(row);
+  });
+  return { batches: rows, total_quantity: totalQty, total_cost: r2(totalCost), wacc: totalQty > 0 ? r2(totalCost / totalQty) : 0 };
+};
+
+/* ---- BONUS ADJUSTMENT ---- (bonus_percentage as fraction, 0 <= x < 1) */
+E.calculateBonus = function (i) {
+  var p = num(i.market_price, 'Market price', { min: 0, minInclusive: false });
+  var b = num(i.bonus_percentage, 'Bonus %', { min: 0, max: 1, maxInclusive: false });
+  var q = int(i.quantity, 'Quantity', { min: 1 });
+  var adj = p / (1 + b), nq = floor8(q * (1 + b)), pre = p * q, post = adj * nq;
+  return { pre_market_price: r2(p), bonus_percentage: b, pre_quantity: q, adjusted_price: r2(adj), new_quantity: nq,
+    pre_portfolio_value: r2(pre), post_portfolio_value: r2(post), value_verified: Math.abs(pre - post) < 1.0 };
+};
+
+/* ---- RIGHT SHARE ADJUSTMENT ---- (right_ratio fraction, 0 <= x < 1) */
+E.calculateRight = function (i) {
+  var u = int(i.initial_units, 'Units held', { min: 1 });
+  var p = num(i.market_price, 'Market price', { min: 0, minInclusive: false });
+  var rr = num(i.right_ratio, 'Right ratio', { min: 0, max: 1, maxInclusive: false });
+  var sp = num(i.subscription_price, 'Subscription price', { min: 0, minInclusive: false });
+  var pre = u * p, allot = u * rr, cash = allot * sp, post = u + allot, basis = pre + cash;
+  var adj = (p + rr * sp) / (1 + rr), postW = post * adj;
+  return { initial_units: u, market_price: r2(p), right_ratio: rr, subscription_price: r2(sp), pre_adjustment_wealth: r2(pre),
+    right_shares_allotted: r2(allot), additional_cash: r2(cash), total_post_shares: r2(post), total_cost_basis: r2(basis),
+    adjusted_price: r2(adj), post_adjustment_wealth: r2(postW), wealth_verified: Math.abs(basis - postW) < 1.0 };
+};
+
+/* ---- DIVIDEND & TDS ---- (percentages as fractions) */
+E.calculateDividend = function (i) {
+  var units = int(i.holding_units, 'Holding units', { min: 1 });
+  var bp = num(i.bonus_percentage, 'Bonus %', { min: 0 });
+  var cp = num(i.cash_dividend_percentage, 'Cash dividend %', { min: 0 });
+  var fv = num(i.face_value == null ? 100 : i.face_value, 'Face value', { min: 0, minInclusive: false });
+  var t = num(i.tds_rate == null ? RATES.tds : i.tds_rate, 'TDS rate', { min: 0, max: 1, maxInclusive: false });
+  var ent = Number((units * bp).toFixed(8)), cred = Math.floor(ent), frac = ent - cred, imputed = ent * fv;
+  var cash = units * fv * cp, base = cash + imputed, tds = base * t;
+  var after = cash - tds, net, due, status;
+  if (after < 0) { net = 0; due = Math.abs(after); status = 'PAY TAX SHORTFALL'; } else { net = after; due = 0; status = 'TAX COVERED'; }
+  return { holding_units: units, face_value: r2(fv), bonus_percentage: bp, cash_dividend_percentage: cp, tds_rate: t,
+    bonus_shares_entitled: roundHalfUp(ent, 4), bonus_shares_credited: cred, fractional_bonus: roundHalfUp(frac, 4), bonus_imputed_value: r2(imputed),
+    gross_cash_dividend: r2(cash), taxable_income_base: r2(base), total_tds_payable: r2(tds), tds_on_cash: r2(cash * t), tds_on_bonus: r2(imputed * t),
+    cash_after_tds: r2(after), net_cash_credited: r2(net), out_of_pocket_due: r2(due), status: status,
+    net_dividend_value_after_tax: r2(net - due + imputed), min_cash_dividend_to_cover_tax: (t * bp) / (1 - t), demat_locked: due > 0 };
+};
+
+/* ---- CAGR ---- */
+E.calculateCagr = function (i) {
+  var a = num(i.initial_investment, 'Initial investment', { min: 0, minInclusive: false });
+  var b = num(i.final_value, 'Final value', { min: 0, minInclusive: false });
+  var y = num(i.duration_years, 'Duration (years)', { min: 0, minInclusive: false });
+  var profit = b - a, abs = profit / a, mult = b / a, cagr = Math.pow(mult, 1 / y) - 1, simple = abs / y;
+  var ytd = cagr > 0 ? Math.log(2) / Math.log(1 + cagr) : 'N/A', r72 = cagr > 0 ? 72 / (cagr * 100) : 'N/A';
+  var need = Math.pow(2, 1 / y) - 1;
+  return { profit: r2(profit), absolute_return_pct: r2(abs * 100), growth_multiple: r2(mult), cagr_pct: r2(cagr * 100),
+    simple_annual_return_pct: r2(simple * 100), years_to_double: typeof ytd === 'number' ? r2(ytd) : ytd,
+    rule_of_72: typeof r72 === 'number' ? r2(r72) : r72, cagr_to_double_pct: r2(need * 100) };
+};
+
+/* ---- EMI ---- (annual_interest_rate as fraction). method: 'reducing' (default) | 'flat' */
+E.calculateEmi = function (i) {
+  var P = num(i.principal, 'Loan amount', { min: 0, minInclusive: false });
+  var rate = num(i.annual_interest_rate, 'Interest rate', { min: 0 });
+  var yrs = num(i.tenure_years, 'Tenure (years)', { min: 0, minInclusive: false });
+  var n = Math.round(yrs * 12);
+  if (n < 1 || n > 360) throw new CalcError('Tenure (years)', 'must be between 1 month and 30 years');
+  var flat = i.method === 'flat', r = rate / 12, emi;
+  if (flat) emi = (P + P * rate * (n / 12)) / n;
+  else emi = r === 0 ? P / n : P * r * Math.pow(1 + r, n) / (Math.pow(1 + r, n) - 1);
+  var total = emi * n, bal = P, sched = [], m, intr, prin;
+  for (m = 1; m <= n; m++) {
+    intr = flat ? P * rate * (n / 12) / n : bal * r; prin = emi - intr; bal = Math.max(bal - prin, 0);
+    sched.push({ month: m, interest: intr, principal: prin, balance: bal });
+  }
+  return { monthly_emi: r2(emi), total_repayment: r2(total), total_interest: r2(total - P), num_installments: n, schedule: sched };
+};
+
+/* ---- SIP ---- (step-up and rate as percent numbers; freq = installments per year) */
+E.calculateSip = function (i) {
+  var P = num(i.amount, 'Installment amount', { min: 0, minInclusive: false });
+  var r = num(i.rate, 'Expected return', { min: 0, max: 60 });
+  var y = int(i.years, 'Duration', { min: 1, max: 50 });
+  var s = num(i.step == null || i.step === '' ? 0 : i.step, 'Step-up', { min: 0, max: 100 });
+  var m = int(i.freq, 'Frequency', { min: 1, max: 12 });
+  var ir = r / 100 / m, bal = 0, inv = 0, rows = [], yy, k, p;
+  for (yy = 0; yy < y; yy++) {
+    p = P * Math.pow(1 + s / 100, yy);
+    for (k = 0; k < m; k++) { bal = (bal + p) * (1 + ir); inv += p; }
+    rows.push({ y: yy + 1, p: p, inv: inv, gain: bal - inv, bal: bal });
+  }
+  return { maturity: bal, invested: inv, gain: bal - inv, gain_pct: inv ? (bal - inv) / inv * 100 : 0, rows: rows };
+};
+
+
+/* =====================================================================================
+   TRADING, CORPORATE-ACTION AND VALUATION ENGINES (v1.5)
+   Conventions: the helper functions that follow the spec signatures take rates as fractions
+   (0.0036 = 0.36%). The calculators below take percentages as plain numbers (15 = 15%).
+   All NEPSE rules (commission slabs, SEBON fee, DP charge, CGT) come from RATES above.
+   ===================================================================================== */
+function blank(v) { return v === null || v === undefined || String(v).trim() === ''; }
+function optional(v, field, o) { return blank(v) ? null : num(v, field, o); }
+function slabRate(value) { var s = RATES.brokerage.slabs, i; for (i = 0; i < s.length; i++) if (value <= s[i][0]) return s[i][1]; return s[s.length - 1][1]; }
+function commission(value, rateOverride) { var rate = rateOverride == null ? slabRate(value) : rateOverride; return { rate: rate, fee: Math.max(value * rate, RATES.brokerage.minFee) }; }
+var pctChange = function (a, b) { return a === 0 ? null : (b - a) / a * 100; };
+
+/* ---- spec helpers ---- */
+E.validatePositiveNumber = function (value, allowZero) {          /* returns '' when valid, otherwise the message */
+  if (blank(value)) return 'Enter required data.';
+  var n = typeof value === 'number' ? value : Number(String(value).trim().replace(/,/g, ''));
+  if (!isFinite(n)) return 'Enter a valid number.';
+  if (n < 0) return 'Value cannot be negative.';
+  if (n === 0 && !allowZero) return 'Value must be greater than zero.';
+  return '';
+};
+E.formatNpr = function (v) { if (v == null || !isFinite(v)) return '\u2013'; return (v < 0 ? '-Rs ' : 'Rs ') + new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(v)); };
+E.calculatePercentageChange = function (oldValue, newValue) { return pctChange(num(oldValue, 'Old value'), num(newValue, 'New value')); };
+E.calculateBuyCost = function (quantity, buyPrice, brokerRate) {
+  var q = num(quantity, 'Quantity', { min: 0, minInclusive: false }), p = num(buyPrice, 'Buy price', { min: 0, minInclusive: false });
+  var v = q * p, c = commission(v, brokerRate == null ? null : num(brokerRate, 'Broker rate', { min: 0, max: 1 })), s = v * RATES.sebon;
+  return { traded_value: v, brokerage_rate: c.rate, brokerage: c.fee, sebon_fee: s, total_buy_cost: v + c.fee + s };
+};
+E.calculateSellProceeds = function (quantity, sellPrice, brokerRate, dpCharge) {
+  var q = num(quantity, 'Quantity', { min: 0, minInclusive: false }), p = num(sellPrice, 'Sell price', { min: 0, minInclusive: false });
+  var v = q * p, c = commission(v, brokerRate == null ? null : num(brokerRate, 'Broker rate', { min: 0, max: 1 })), s = v * RATES.sebon;
+  var dp = dpCharge == null ? RATES.dp : num(dpCharge, 'DP charge', { min: 0 }), ch = c.fee + s + dp;
+  return { traded_value: v, brokerage_rate: c.rate, brokerage: c.fee, sebon_fee: s, dp_charge: dp, total_sell_charges: ch, net_sell_proceeds: v - ch };
+};
+E.calculateCgt = function (buyCost, netSellProceeds, holdingDays, shortRate, longRate) {   /* CGT only on a positive gain */
+  var sr = shortRate == null ? RATES.cgt.individual_short : shortRate, lr = longRate == null ? RATES.cgt.individual_long : longRate;
+  var rate = holdingDays <= 365 ? sr : lr, gain = Math.max(0, netSellProceeds - buyCost), tax = gain * rate;
+  return { taxable_gain: gain, applicable_rate: rate, cgt_amount: tax, net_profit_after_tax: netSellProceeds - buyCost - tax };
+};
+E.calculateWeightedAveragePrice = function (oldQuantity, oldAveragePrice, newQuantity, newPurchasePrice) {
+  var tq = oldQuantity + newQuantity, ti = oldQuantity * oldAveragePrice + newQuantity * newPurchasePrice;
+  if (!(tq > 0)) throw new CalcError('Quantity', 'total quantity must be greater than zero');
+  return { total_quantity: tq, total_investment: ti, new_average_price: ti / tq };
+};
+function daysBetween(a, b) {
+  var re = /^(\d{4})-(\d{2})-(\d{2})$/, x = re.exec(String(a || '')), y = re.exec(String(b || ''));
+  if (!x) throw new CalcError('Buy date', 'is required', true); if (!y) throw new CalcError('Sell date', 'is required', true);
+  return Math.round((Date.UTC(+y[1], +y[2] - 1, +y[3]) - Date.UTC(+x[1], +x[2] - 1, +x[3])) / 86400000);
+}
+E.daysBetween = daysBetween;
+var rateOpt = function (pct, field) { return blank(pct) ? null : num(pct, field, { min: 0, max: 100 }) / 100; };
+
+/* smallest sell price (to the paisa) whose net proceeds reach requiredNet; net proceeds never decrease as price rises */
+function solveSellPrice(requiredNet, q, rate, dp) {
+  var s = RATES.sebon, rmax = rate == null ? Math.max.apply(null, RATES.brokerage.slabs.map(function (x) { return x[1]; })) : rate;
+  if (rmax + s >= 1) throw new CalcError('Broker rate', 'is too high to recover costs');
+  var net = function (P) { var v = q * P, c = commission(v, rate); return v - c.fee - v * s - dp; };
+  var hi = Math.ceil(((requiredNet + dp + RATES.brokerage.minFee) / (q * (1 - s - rmax))) * 100) + 100, lo = 0, mid;
+  while (lo < hi) { mid = Math.floor((lo + hi) / 2); if (net(mid / 100) >= requiredNet - 1e-9) hi = mid; else lo = mid + 1; }
+  return lo / 100;
+}
+
+/* ---- 1 PROFIT / LOSS ---- */
+E.calculateProfitLoss = function (i) {
+  var bp = num(i.buy_price, 'Buy price', { min: 0, minInclusive: false }), sp = num(i.sell_price, 'Sell price', { min: 0, minInclusive: false }), q = int(i.quantity, 'Quantity', { min: 1 });
+  var br = rateOpt(i.broker_rate_pct, 'Broker rate'), dp = optional(i.dp_charge, 'DP charge', { min: 0 }), ov = rateOpt(i.cgt_rate_pct, 'CGT rate');
+  var days = daysBetween(i.buy_date, i.sell_date); if (days < 0) throw new CalcError('Sell date', 'must be on or after the buy date');
+  var buy = E.calculateBuyCost(q, bp, br), sell = E.calculateSellProceeds(q, sp, br, dp), cg = E.calculateCgt(buy.total_buy_cost, sell.net_sell_proceeds, days, ov, ov);
+  var gross = (sp - bp) * q, net = sell.net_sell_proceeds - buy.total_buy_cost - cg.cgt_amount;
+  return { holding_days: days, total_buy_cost: buy.total_buy_cost, buy_charges: buy.brokerage + buy.sebon_fee, total_sell_value: sell.traded_value, sell_charges: sell.total_sell_charges,
+    net_sell_proceeds: sell.net_sell_proceeds, gross_profit_loss: gross, taxable_gain: cg.taxable_gain, cgt_rate_pct: cg.applicable_rate * 100, cgt_amount: cg.cgt_amount,
+    net_profit_loss: net, return_pct: net / buy.total_buy_cost * 100, result: net > 0 ? 'Profit' : net < 0 ? 'Loss' : 'Break-even', term: days <= 365 ? 'Short-term (365 days or less)' : 'Long-term (more than 365 days)' };
+};
+
+/* ---- 2 BREAK-EVEN ---- */
+E.calculateBreakEven = function (i) {
+  var bp = num(i.buy_price, 'Buy price', { min: 0, minInclusive: false }), q = int(i.quantity, 'Quantity', { min: 1 }), br = rateOpt(i.broker_rate_pct, 'Broker rate'), dp = optional(i.dp_charge, 'DP charge', { min: 0 });
+  var buy = E.calculateBuyCost(q, bp, br), dpv = dp == null ? RATES.dp : dp, P = solveSellPrice(buy.total_buy_cost, q, br, dpv), sell = E.calculateSellProceeds(q, P, br, dpv);
+  return { break_even_price: P, total_buy_cost: buy.total_buy_cost, sell_charges: sell.total_sell_charges, price_increase: P - bp, price_increase_pct: pctChange(bp, P) };
+};
+
+/* ---- 3 TARGET SELL PRICE (CGT is grossed up exactly, so the net profit equals the target) ---- */
+E.calculateTargetSellPrice = function (i) {
+  var bp = num(i.buy_price, 'Buy price', { min: 0, minInclusive: false }), q = int(i.quantity, 'Quantity', { min: 1 }), br = rateOpt(i.broker_rate_pct, 'Broker rate'), dp = optional(i.dp_charge, 'DP charge', { min: 0 });
+  var ov = rateOpt(i.cgt_rate_pct, 'CGT rate'), days = daysBetween(i.buy_date, i.sell_date); if (days < 0) throw new CalcError('Expected sell date', 'must be on or after the buy date');
+  var buy = E.calculateBuyCost(q, bp, br), dpv = dp == null ? RATES.dp : dp, t = ov != null ? ov : (days <= 365 ? RATES.cgt.individual_short : RATES.cgt.individual_long), D;
+  if (i.mode === 'pct') D = buy.total_buy_cost * num(i.desired_return_pct, 'Desired return %', { min: 0 }) / 100; else D = num(i.desired_profit, 'Desired net profit', { min: 0 });
+  if (t >= 1) throw new CalcError('CGT rate', 'must be below 100%');
+  var need = D > 0 ? D / (1 - t) : 0, P = solveSellPrice(buy.total_buy_cost + need, q, br, dpv), sell = E.calculateSellProceeds(q, P, br, dpv), cg = E.calculateCgt(buy.total_buy_cost, sell.net_sell_proceeds, days, ov, ov);
+  return { target_price: P, required_gross_profit: (P - bp) * q, estimated_cgt: cg.cgt_amount, cgt_rate_pct: cg.applicable_rate * 100, net_profit: cg.net_profit_after_tax, desired_net_profit: D, total_buy_cost: buy.total_buy_cost,
+    price_increase_pct: pctChange(bp, P), holding_days: days, term: days <= 365 ? 'Short-term (365 days or less)' : 'Long-term (more than 365 days)' };
+};
+
+/* ---- 4 POSITION SIZE ---- (shares = risk amount / risk per share; the spec text divides by the price twice, which is corrected here) */
+E.calculatePositionSize = function (i) {
+  var cap = num(i.total_capital, 'Total capital', { min: 0, minInclusive: false }), rp = num(i.risk_pct, 'Risk per trade %', { min: 0, max: 100, minInclusive: false }), en = num(i.entry_price, 'Entry price', { min: 0, minInclusive: false });
+  var sl = num(i.stop_loss, 'Stop-loss price', { min: 0, minInclusive: false }), al = optional(i.max_alloc_pct, 'Maximum allocation %', { min: 0, max: 100, minInclusive: false });
+  if (sl >= en) throw new CalcError('Stop-loss price', 'must be below the entry price');
+  var riskAmt = cap * rp / 100, rps = en - sl, byRisk = Math.floor(Number((riskAmt / rps).toFixed(8))), reqCap = byRisk * en;
+  var limit = al == null ? cap : cap * al / 100, byCap = Math.floor(Number((limit / en).toFixed(8))), shares = Math.min(byRisk, byCap), warnings = [];
+  if (reqCap > cap) warnings.push('The risk-based position needs more capital than you have. The share count is capped by your capital.');
+  else if (al != null && reqCap > limit) warnings.push('The position is capped by your maximum allocation.');
+  if (shares < 1) warnings.push('Capital or risk budget is too small for even one share at this entry and stop-loss.');
+  var val = shares * en, risk = shares * rps;
+  return { max_risk_amount: riskAmt, risk_per_share: rps, risk_based_shares: byRisk, required_capital: reqCap, shares: shares, position_size_rs: val, actual_risk: risk, actual_risk_pct: risk / cap * 100, position_pct_of_capital: val / cap * 100, warnings: warnings };
+};
+
+/* ---- 5 RISK / REWARD ---- */
+E.calculateRiskReward = function (i) {
+  var en = num(i.entry_price, 'Entry price', { min: 0, minInclusive: false }), sl = num(i.stop_loss, 'Stop-loss price', { min: 0, minInclusive: false }), tg = num(i.target_price, 'Target price', { min: 0, minInclusive: false });
+  var q = int(i.quantity, 'Quantity', { min: 1 }), wp = optional(i.win_probability_pct, 'Win probability %', { min: 0, max: 100 });
+  if (sl >= en) throw new CalcError('Stop-loss price', 'must be below the entry price');
+  if (tg <= en) throw new CalcError('Target price', 'must be above the entry price');
+  var risk = en - sl, reward = tg - en, out = { risk_per_share: risk, reward_per_share: reward, rr_ratio: reward / risk, total_risk: risk * q, total_reward: reward * q, break_even_win_rate_pct: risk / (risk + reward) * 100, expected_value_per_share: null, expected_value_total: null };
+  if (wp != null) { out.expected_value_per_share = wp / 100 * reward - (1 - wp / 100) * risk; out.expected_value_total = out.expected_value_per_share * q; }
+  return out;
+};
+
+/* ---- 6 BONUS SHARES (cost basis) ---- */
+E.calculateBonusShares = function (i) {
+  var q = int(i.quantity, 'Existing quantity', { min: 1 }), avg = num(i.avg_price, 'Average buy price', { min: 0, minInclusive: false }), b = num(i.bonus_pct, 'Bonus %', { min: 0, max: 1000 });
+  var ent = Number((q * b / 100).toFixed(8)), cred = Math.floor(ent), nq = q + cred, inv = q * avg;
+  return { bonus_entitled: ent, bonus_shares: cred, fractional: ent - cred, new_quantity: nq, total_investment: inv, new_average_price: inv / nq, old_average_price: avg };
+};
+
+/* ---- 7 RIGHT SHARES ---- */
+E.calculateRightShares = function (i) {
+  var q = int(i.quantity, 'Existing quantity', { min: 1 }), avg = num(i.avg_price, 'Average buy price', { min: 0, minInclusive: false }), r = num(i.right_pct, 'Right %', { min: 0, max: 1000 }), rp = num(i.right_price, 'Right issue price', { min: 0, minInclusive: false });
+  var ent = Number((q * r / 100).toFixed(8)), sh = Math.floor(ent), cash = sh * rp, nq = q + sh, tot = q * avg + cash, na = tot / nq;
+  return { right_entitled: ent, right_shares: sh, fractional: ent - sh, cash_required: cash, new_quantity: nq, total_investment: tot, new_average_price: na, average_change: na - avg, average_change_pct: pctChange(avg, na), old_average_price: avg };
+};
+
+/* ---- 8 COMBINED BONUS + RIGHT (order matters because the second action works on the first action's quantity) ---- */
+E.calculateCombinedActions = function (i) {
+  var q = int(i.quantity, 'Existing quantity', { min: 1 }), avg = num(i.avg_price, 'Average price', { min: 0, minInclusive: false }), b = num(i.bonus_pct, 'Bonus %', { min: 0, max: 1000 });
+  var r = num(i.right_pct, 'Right %', { min: 0, max: 1000 }), rp = num(i.right_price, 'Right issue price', { min: 0, minInclusive: false }), mp = optional(i.market_price, 'Market price', { min: 0, minInclusive: false });
+  var order = i.order === 'right_first' ? ['right', 'bonus'] : ['bonus', 'right'], qty = q, inv = q * avg, cashTotal = 0, bonusTotal = 0, rightTotal = 0;
+  var steps = [{ action: 'Start', added: 0, cash: 0, quantity: qty, total_investment: inv, avg: inv / qty }];
+  order.forEach(function (a) {
+    var pctv = a === 'bonus' ? b : r, ent = Number((qty * pctv / 100).toFixed(8)), sh = Math.floor(ent), cash = a === 'right' ? sh * rp : 0;
+    qty += sh; inv += cash; cashTotal += cash; if (a === 'bonus') bonusTotal += sh; else rightTotal += sh;
+    steps.push({ action: a === 'bonus' ? 'Bonus ' + b + '%' : 'Right ' + r + '% @ Rs ' + rp, added: sh, cash: cash, quantity: qty, total_investment: inv, avg: inv / qty });
+  });
+  return { bonus_shares: bonusTotal, right_shares: rightTotal, cash_required: cashTotal, final_quantity: qty, final_average_price: inv / qty, total_investment: inv, steps: steps,
+    adjusted_price: mp == null ? null : (q * mp + cashTotal) / qty, first_action: order[0] };
+};
+
+/* ---- 9 DIVIDEND REINVESTMENT ---- */
+E.calculateDividendReinvestment = function (i) {
+  var q = int(i.quantity, 'Existing quantity', { min: 1 }), avg = num(i.avg_price, 'Average price', { min: 0, minInclusive: false }), dps = num(i.dps, 'Dividend per share', { min: 0, minInclusive: false });
+  var rpx = num(i.reinvest_price, 'Reinvestment price', { min: 0, minInclusive: false }), pc = blank(i.reinvest_pct) ? 100 : num(i.reinvest_pct, 'Reinvestment %', { min: 0, max: 100 }), ch = blank(i.charge_pct) ? 0 : num(i.charge_pct, 'Charges %', { min: 0, max: 20 });
+  var total = q * dps, amount = total * pc / 100, unit = rpx * (1 + ch / 100), ns = Math.floor(Number((amount / unit).toFixed(8))), used = ns * unit, nq = q + ns, inv = q * avg + used;
+  return { total_dividend: total, amount_reinvested: amount, new_shares: ns, cash_used: used, remaining_cash: amount - used, cash_not_reinvested: total - amount, new_quantity: nq, new_average_price: inv / nq, total_investment: inv,
+    value_before: q * rpx, value_after: nq * rpx, value_change: (nq - q) * rpx };
+};
+
+/* ---- VALUATION ---- */
+var V = RATES.valuation;
+function verdict(upsidePct) { return upsidePct > V.fair_band_pct ? { text: 'Undervalued', kind: 'ok' } : upsidePct < -V.fair_band_pct ? { text: 'Overvalued', kind: 'bad' } : { text: 'Fairly valued', kind: 'wa' }; }
+function vs(value, price) {   /* upside / margin of safety against the market price (price is optional) */
+  if (price == null || !(value > 0)) return { upside_pct: null, mos_pct: null, verdict: null };
+  return { upside_pct: (value - price) / price * 100, mos_pct: (value - price) / value * 100, verdict: verdict((value - price) / price * 100) };
+}
+E.verdict = verdict;
+var priceOpt = function (v) { return optional(v, 'Current market price', { min: 0, minInclusive: false }); };
+
+E.calculateGraham = function (i) {
+  var eps = num(i.eps, 'EPS', { min: 0, minInclusive: false }), g = num(i.growth_pct, 'Expected growth %', { min: 0, max: 100 }), y = num(i.bond_yield_pct, 'AAA bond yield %', { min: 0, minInclusive: false }), p = priceOpt(i.price);
+  var value = eps * (8.5 + 2 * g) * (4.4 / y), o = vs(value, p); o.value = value; o.price = p; return o;
+};
+E.calculatePeValuation = function (i) {
+  var eps = num(i.eps, 'EPS', { min: 0, minInclusive: false }), p = num(i.price, 'Current market price', { min: 0, minInclusive: false }), t = num(i.target_pe, 'Target P/E', { min: 0, minInclusive: false });
+  var fair = eps * t, o = vs(fair, p); o.current_pe = p / eps; o.target_pe = t; o.fair_value = fair; o.price = p; return o;
+};
+E.calculatePbValuation = function (i) {
+  var b = num(i.bvps, 'Book value per share', { min: 0, minInclusive: false }), p = num(i.price, 'Current market price', { min: 0, minInclusive: false }), t = num(i.target_pb, 'Target P/B', { min: 0, minInclusive: false });
+  var fair = b * t, o = vs(fair, p); o.current_pb = p / b; o.target_pb = t; o.fair_value = fair; o.price = p; return o;
+};
+E.calculateDividendYield = function (i) {
+  var d = num(i.dps, 'Annual dividend per share', { min: 0, minInclusive: false }), p = num(i.price, 'Current market price', { min: 0, minInclusive: false }), avg = optional(i.avg_price, 'Average buy price', { min: 0, minInclusive: false });
+  var q = optional(i.quantity, 'Quantity', { min: 1 }), n = { annual: 1, semi: 2, quarterly: 4 }[i.frequency || 'annual'] || 1;
+  return { dividend_yield_pct: d / p * 100, yield_on_cost_pct: avg == null ? null : d / avg * 100, annual_income: q == null ? null : d * q, per_payment_income: q == null ? null : d * q / n, payments_per_year: n };
+};
+E.calculateDdm = function (i) {
+  var d0 = num(i.d0, 'Current annual dividend', { min: 0, minInclusive: false }), g = num(i.growth_pct, 'Dividend growth %', { min: -50, max: 100 }), r = num(i.required_pct, 'Required return %', { min: 0, minInclusive: false }), p = priceOpt(i.price);
+  if (g >= r) throw new CalcError('Growth rate', 'must be lower than the required return');
+  var d1 = d0 * (1 + g / 100), value = d1 / ((r - g) / 100), o = vs(value, p); o.next_dividend = d1; o.value = value; o.price = p; return o;
+};
+E.calculateDcf = function (i) {
+  var f0 = num(i.fcf, 'Free cash flow', { min: 0, minInclusive: false }), g1 = num(i.growth_pct, 'Initial growth %', { min: -50, max: 100 }), gt = num(i.terminal_pct, 'Terminal growth %', { min: -10, max: 100 });
+  var w = num(i.discount_pct, 'Discount rate (WACC) %', { min: 0, minInclusive: false }), n = int(i.years, 'Projection years', { min: 1, max: 30 }), nd = num(i.net_debt, 'Net debt'), sh = num(i.shares, 'Shares outstanding', { min: 0, minInclusive: false }), p = priceOpt(i.price);
+  if (gt >= w) throw new CalcError('Terminal growth', 'must be lower than the discount rate');
+  var rows = [], pvSum = 0, t, fcf, pv;
+  for (t = 1; t <= n; t++) { fcf = f0 * Math.pow(1 + g1 / 100, t); pv = fcf / Math.pow(1 + w / 100, t); pvSum += pv; rows.push({ year: t, fcf: fcf, pv: pv }); }
+  var tv = rows[n - 1].fcf * (1 + gt / 100) / ((w - gt) / 100), pvTv = tv / Math.pow(1 + w / 100, n), ev = pvSum + pvTv, eq = ev - nd, fair = eq / sh, warnings = [];
+  if (gt > V.terminal_growth_warn_pct) warnings.push('Terminal growth above ' + V.terminal_growth_warn_pct + '% is rarely sustainable for ever. Treat the result with caution.');
+  if (eq <= 0) warnings.push('Equity value is zero or negative with these inputs, so there is no meaningful value per share.');
+  var o = vs(fair, p); o.rows = rows; o.pv_sum = pvSum; o.terminal_value = tv; o.pv_terminal = pvTv; o.enterprise_value = ev; o.equity_value = eq; o.value = fair; o.price = p; o.warnings = warnings; o.terminal_share_pct = pvTv / ev * 100; return o;
+};
+function hasData(o) { return Object.keys(o).some(function (k) { return !blank(o[k]); }); }
+E.calculateIntrinsicValue = function (i) {
+  var m = i.method || 'graham', p = priceOpt(i.price), list = [], skipped = [];
+  var runs = [['Graham', 'graham', E.calculateGraham, { eps: i.g_eps, growth_pct: i.g_growth, bond_yield_pct: i.g_yield }], ['DDM', 'ddm', E.calculateDdm, { d0: i.d_d0, growth_pct: i.d_growth, required_pct: i.d_req }],
+    ['DCF', 'dcf', E.calculateDcf, { fcf: i.c_fcf, growth_pct: i.c_g1, terminal_pct: i.c_gt, discount_pct: i.c_w, years: i.c_years, net_debt: i.c_nd, shares: i.c_sh }]];
+  runs.forEach(function (r) {
+    if (m !== 'blend' && m !== r[1]) return;
+    if (m === 'blend' && !hasData(r[3])) { skipped.push(r[0]); return; }
+    try { list.push({ method: r[0], value: r[2](r[3]).value }); } catch (e) { if (e && e.name === 'CalculatorInputError') { e.message = r[0] + ': ' + e.message; e.field = r[0] + ' ' + e.field; } throw e; }
+  });
+  if (!list.length) throw new CalcError('Inputs', 'enter the data for at least one method', true);
+  var vals = list.map(function (x) { return x.value; }).sort(function (a, b) { return a - b; }), avg = vals.reduce(function (a, b) { return a + b; }, 0) / vals.length;
+  var med = vals.length % 2 ? vals[(vals.length - 1) / 2] : (vals[vals.length / 2 - 1] + vals[vals.length / 2]) / 2, sel = m === 'blend' ? avg : vals[0], o = vs(sel, p);
+  o.methods = list; o.average = avg; o.median = med; o.selected = sel; o.skipped = skipped; o.price = p; o.is_blend = m === 'blend'; return o;
+};
+E.calculateTargetPrice = function (i) {
+  var p = num(i.price, 'Current market price', { min: 0, minInclusive: false }), t;
+  if (i.mode === 'iv') t = num(i.intrinsic_value, 'Intrinsic value', { min: 0, minInclusive: false }); else t = num(i.eps, 'EPS', { min: 0, minInclusive: false }) * num(i.target_pe, 'Target P/E', { min: 0, minInclusive: false });
+  return { target_price: t, price: p, upside_pct: (t - p) / p * 100, required_change: t - p, verdict: verdict((t - p) / p * 100) };
+};
+E.calculateMarginOfSafety = function (i) {
+  var iv = num(i.intrinsic_value, 'Intrinsic value', { min: 0, minInclusive: false }), p = num(i.price, 'Current market price', { min: 0, minInclusive: false }), m = (iv - p) / iv * 100, text, kind;
+  if (m >= V.mos_strong_pct) { text = 'Strong margin of safety'; kind = 'ok'; } else if (m >= V.mos_moderate_pct) { text = 'Moderate margin of safety'; kind = 'ok'; }
+  else if (m >= 0) { text = 'Limited margin of safety'; kind = 'wa'; } else { text = 'Trading above estimated intrinsic value'; kind = 'bad'; }
+  return { margin_of_safety_pct: m, verdict: { text: text, kind: kind }, intrinsic_value: iv, price: p };
+};
+E.calculateEarningsYield = function (i) {
+  var eps = num(i.eps, 'EPS', { min: 0, minInclusive: false }), p = num(i.price, 'Current market price', { min: 0, minInclusive: false }), rf = optional(i.risk_free_pct, 'Risk-free / fixed-deposit rate %', { min: 0, max: 100 }), ey = eps / p * 100, o = { earnings_yield_pct: ey, risk_free_pct: rf, difference_pp: null, interpretation: '' };
+  if (rf != null) { o.difference_pp = ey - rf; o.interpretation = ey > rf ? 'The earnings yield is above the risk-free rate: you are paid more than a safe deposit for the extra risk.' : ey < rf ? 'The earnings yield is below the risk-free rate: a safe deposit pays more than these earnings, so the price assumes strong growth.' : 'The earnings yield equals the risk-free rate.'; }
+  return o;
+};
+
+
+/* ---- MARGIN CALL (v2.0.0) and PIVOT POINTS (v1.0.0): the project's verified JS ports, embedded unchanged
+        (only the import/export lines are removed). They share this file's num / roundHalfUp / error class. ---- */
+E.calculateMarginCall = (function (CalculatorInputError, num, roundHalfUp) {
+/**
+ * NEPSE Margin Call Calculator - JavaScript port (no dependencies).
+ *
+ * Same logic, same input/output keys (snake_case) and same rounding rule as
+ * calculators/margin_call.py, so a result from the browser equals a result from the API.
+ * Works in browsers (<script type="module">) and Node 18+.
+ *
+ * Spec: documentation/specs/NEPSE_Margin_Call_Calculator_v2.xlsx
+ * Rules: SEBON Margin Trading Facility Directive 2082 (min initial 30%, min maintenance 20%).
+ */
+
+
+
+const CALCULATOR_ID = "margin_call";
+const VERSION = "2.0.0";
+const STATUS_SAFE = "SAFE";
+const STATUS_WARNING = "WARNING";
+const STATUS_MARGIN_CALL = "MARGIN CALL";
+
+const MAX_PRICE = 100000;
+const MAX_AMOUNT = 1e12;
+
+const r2 = (x) => roundHalfUp(x, 2);
+const r4 = (x) => roundHalfUp(x, 4);
+
+/**
+ * @param {object} i
+ * @param {number|string} i.stock_purchase_price  Rs per share
+ * @param {number|string} i.own_cash              Rs
+ * @param {number|string} i.broker_loan           Rs
+ * @param {number|string} i.maintenance_margin    fraction (0.20 = 20%)
+ * @param {number|string} i.current_ltp           Rs
+ * @param {number|string} [i.min_initial_margin=0.30]
+ * @param {number|string} [i.warning_buffer=0.05]
+ * @returns {object} same keys as MarginCallResult in Python
+ */
+function calculateMarginCall(i) {
+  const price = num(i.stock_purchase_price, "stock_purchase_price", { min: 0.01, max: MAX_PRICE });
+  const cash = num(i.own_cash, "own_cash", { min: 0, max: MAX_AMOUNT, minInclusive: false });
+  const loan = num(i.broker_loan, "broker_loan", { min: 0, max: MAX_AMOUNT });
+  const m = num(i.maintenance_margin, "maintenance_margin", { min: 0, max: 1, minInclusive: false, maxInclusive: false });
+  const ltp = num(i.current_ltp, "current_ltp", { min: 0.01, max: MAX_PRICE });
+  const minInit = num(i.min_initial_margin ?? 0.30, "min_initial_margin", { min: 0, max: 1, minInclusive: false });
+  const buffer = num(i.warning_buffer ?? 0.05, "warning_buffer", { min: 0, max: 1 });
+
+  const pool = cash + loan;
+  const initRatio = cash / pool;
+  const initOk = initRatio >= minInit - 0.000001;
+
+  // Excel: INT(ROUND(pool/price, 8))
+  const shares = Math.floor(Number((pool / price).toFixed(8)));
+  if (shares < 1) {
+    throw new CalculatorInputError(
+      "own_cash",
+      `cash + loan (Rs ${pool.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) is less than one share price (Rs ${price.toFixed(2)})`
+    );
+  }
+
+  const cost = shares * price;
+  const unused = pool - cost;
+
+  const trigger = loan / (shares * (1 - m));
+  const fall = price - trigger;
+  const fallPct = trigger / price - 1;
+  const valueAtTrigger = shares * trigger;
+  const equityAtTrigger = valueAtTrigger - loan;
+  const ratioAtTrigger = valueAtTrigger > 0 ? equityAtTrigger / valueAtTrigger : 0;
+
+  const valueNow = shares * ltp;
+  const equityNow = valueNow - loan;
+  const ratioNow = equityNow / valueNow;
+  const ltv = loan / valueNow;
+  const cushion = ltp - trigger;
+  const cushionPct = trigger > 0 ? ltp / trigger - 1 : 0;
+
+  let status;
+  if (ltp < trigger) status = STATUS_MARGIN_CALL;
+  else if (ltp <= trigger * (1 + buffer)) status = STATUS_WARNING;
+  else status = STATUS_SAFE;
+
+  const topUp = Math.max(0, loan - (1 - m) * valueNow);
+  let sell;
+  if (topUp === 0) sell = 0;
+  else if (equityNow <= 0) sell = null;
+  else sell = Math.ceil((valueNow - equityNow / m) / ltp);
+
+  // lowest price (to the paisa) at which margin is still met; guard float noise before ceiling
+  const minSafe = loan > 0 ? Math.ceil(Number((trigger * 100).toFixed(6))) / 100 : 0;
+
+  const notes = [];
+  if (loan === 0) notes.push("No broker loan: a margin call cannot occur on this position.");
+  if (!initOk) {
+    notes.push(`Own cash is ${(initRatio * 100).toFixed(1)}% of buying power, below the required minimum initial margin of ${(minInit * 100).toFixed(1)}%.`);
+  }
+  if (status === STATUS_MARGIN_CALL) notes.push("Current price is below the trigger price: the maintenance margin is not met.");
+  else if (status === STATUS_WARNING) notes.push(`Current price is within ${(buffer * 100).toFixed(1)}% above the trigger price.`);
+
+  return {
+    total_buying_power: r2(pool),
+    initial_margin_ratio: r4(initRatio),
+    initial_margin_check: initOk ? "OK" : "BELOW MINIMUM",
+    shares_purchased: shares,
+    purchase_value: r2(cost),
+    unused_buying_power: r2(unused),
+    trigger_price: r2(trigger),
+    price_fall_to_trigger: r2(fall),
+    price_fall_pct: r4(fallPct * 100),
+    portfolio_at_trigger: r2(valueAtTrigger),
+    equity_at_trigger: r2(equityAtTrigger),
+    equity_ratio_at_trigger: r4(ratioAtTrigger),
+    portfolio_at_ltp: r2(valueNow),
+    current_equity: r2(equityNow),
+    current_equity_ratio: r4(ratioNow),
+    loan_to_value: r4(ltv),
+    cushion_above_trigger: r2(cushion),
+    cushion_above_trigger_pct: r4(cushionPct * 100),
+    status,
+    cash_top_up: r2(topUp),
+    shares_to_sell: sell,
+    min_safe_price: r2(minSafe),
+    notes,
+  };
+}
+
+return calculateMarginCall;
+})(CalcError, num, roundHalfUp);
+
+E.calculatePivotPoints = (function (CalculatorInputError, num, roundHalfUp) {
+/**
+ * Pivot Point Calculator (Floor, Woodie, Camarilla, DeMark) - JavaScript port, no dependencies.
+ * Same logic, keys (snake_case) and rounding as calculators/pivot_points.py.
+ * Spec: documentation/specs/NEPSE_Pivot_Point_Calculator.xlsx
+ */
+
+
+const CALCULATOR_ID = "pivot_points";
+const VERSION = "1.0.0";
+const GRID_LEVELS = ["R4", "R3", "R2", "R1", "PP", "S1", "S2", "S3", "S4"];
+
+const MAX_PRICE = 100000;
+const SHOWN = {
+  floor: ["r3", "r2", "r1", "pp", "s1", "s2", "s3"],
+  woodie: ["r2", "r1", "pp", "s1", "s2"],
+  camarilla: ["r4", "r3", "r2", "r1", "s1", "s2", "s3", "s4"],
+  demark: ["r1", "s1"], // DeMark PP is computed but not shown in the website grid
+};
+
+/**
+ * @param {{high:number|string, low:number|string, open_price:number|string, close_price:number|string}} i
+ */
+function calculatePivotPoints(i) {
+  const h = num(i.high, "high", { min: 0.01, max: MAX_PRICE });
+  const l = num(i.low, "low", { min: 0.01, max: MAX_PRICE });
+  const o = num(i.open_price, "open_price", { min: 0.01, max: MAX_PRICE });
+  const c = num(i.close_price, "close_price", { min: 0.01, max: MAX_PRICE });
+  if (h < l) throw new CalculatorInputError("high", "must be at least the low price");
+  if (o < l || o > h) throw new CalculatorInputError("open_price", "must be between the low and high price");
+  if (c < l || c > h) throw new CalculatorInputError("close_price", "must be between the low and high price");
+
+  const rng = h - l;
+  const ppF = (h + l + c) / 3;
+  const floor = { pp: ppF, r1: 2 * ppF - l, r2: ppF + rng, r3: h + 2 * (ppF - l), s1: 2 * ppF - h, s2: ppF - rng, s3: l - 2 * (h - ppF) };
+  const ppW = (h + l + 2 * c) / 4;
+  const woodie = { pp: ppW, r1: 2 * ppW - l, r2: ppW + rng, s1: 2 * ppW - h, s2: ppW - rng };
+  const camarilla = {
+    r4: c + (rng * 1.1) / 2, r3: c + (rng * 1.1) / 4, r2: c + (rng * 1.1) / 6, r1: c + (rng * 1.1) / 12,
+    s1: c - (rng * 1.1) / 12, s2: c - (rng * 1.1) / 6, s3: c - (rng * 1.1) / 4, s4: c - (rng * 1.1) / 2,
+  };
+  let demarkCase, x;
+  if (c < o) { demarkCase = "Close < Open"; x = h + 2 * l + c; }
+  else if (c > o) { demarkCase = "Close > Open"; x = 2 * h + l + c; }
+  else { demarkCase = "Close = Open"; x = h + l + 2 * c; }
+  const demark = { pp: x / 4, r1: x / 2 - l, s1: x / 2 - h };
+
+  const round = (set) => Object.fromEntries(Object.entries(set).map(([k, v]) => [k, roundHalfUp(v, 2)]));
+  const out = { floor: round(floor), woodie: round(woodie), camarilla: round(camarilla), demark: round(demark) };
+  const grid = GRID_LEVELS.map((level) => {
+    const key = level.toLowerCase();
+    const row = { level };
+    for (const m of ["floor", "woodie", "camarilla", "demark"]) row[m] = SHOWN[m].includes(key) ? out[m][key] : null;
+    return row;
+  });
+  return { ...out, demark_case: demarkCase, demark_x: roundHalfUp(x, 2), range: roundHalfUp(rng, 2), grid };
+}
+
+return calculatePivotPoints;
+})(CalcError, num, roundHalfUp);
+
+/* ---- UNITS (table from the toolkit; Nepal land units included) ---- */
+var UNITS={
+ length:{label:"Length",u:{km:["Kilometre",1000],m:["Metre",1],cm:["Centimetre",.01],mm:["Millimetre",.001],mi:["Mile",1609.344],yd:["Yard",.9144],ft:["Foot",.3048],"in":["Inch",.0254],haath:["Haath (NP)",.4572],dhanush:["Dhanush (NP)",1.8288]},def:["km","m"]},
+ weight:{label:"Weight",u:{t:["Tonne",1000],kg:["Kilogram",1],g:["Gram",.001],mg:["Milligram",1e-6],lb:["Pound",.45359237],oz:["Ounce",.028349523125],tola:["Tola (NP)",.011664]},def:["t","kg"]},
+ area:{label:"Area",u:{km2:["Sq Km",1e6],m2:["Sq Metre",1],ha:["Hectare",1e4],acre:["Acre",4046.8564224],ft2:["Sq Foot",.09290304],ropani:["Ropani (NP)",508.737047],aana:["Aana (NP)",31.79606544],paisa:["Paisa (NP)",7.94901636],dam:["Dam (NP)",1.98725409],bigha:["Bigha (NP)",6772.631616],kattha:["Kattha (NP)",338.6315808],dhur:["Dhur (NP)",16.93157904]},def:["ropani","aana"]},
+ temp:{label:"Temp",u:{C:["Celsius"],F:["Fahrenheit"],K:["Kelvin"]},def:["C","F"]},
+ speed:{label:"Speed",u:{kmh:["km/h",1/3.6],ms:["m/s",1],mph:["mph",.44704],knot:["Knot",1852/3600]},def:["kmh","ms"]},
+ data:{label:"Data",u:{bit:["Bit",.125],B:["Byte",1],KB:["Kilobyte",1024],MB:["Megabyte",1048576],GB:["Gigabyte",1073741824],TB:["Terabyte",1099511627776]},def:["GB","MB"]},
+ time:{label:"Time",u:{ms:["Millisecond",.001],s:["Second",1],min:["Minute",60],hr:["Hour",3600],day:["Day",86400],week:["Week",604800],year:["Year (365 d)",31536000]},def:["hr","s"]}
+};
+E.UNITS = UNITS;
+E.convertUnit = function (cat, value, from, to) {
+  var C = UNITS[cat]; if (!C || !C.u[from] || !C.u[to]) throw new CalcError('Unit', 'unknown unit');
+  var v = num(value, 'Value');
+  if (cat === 'temp') {
+    var c = from === 'C' ? v : from === 'F' ? (v - 32) * 5 / 9 : v - 273.15;
+    return to === 'C' ? c : to === 'F' ? c * 9 / 5 + 32 : c + 273.15;
+  }
+  return v * C.u[from][1] / C.u[to][1];
+};
+
+root.NNH_ENGINES = E;
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>
+/* ===== CALCULATORS tab UI. Registry-driven: add a calculator by adding one entry to CALCS. ===== */
+(function () {
+'use strict';
+var E = window.NNH_ENGINES, D = window.NNH_DATA;
+var host = document.getElementById('calc'), nav = document.getElementById('calc-nav'), body = document.getElementById('calc-body');
+if (!E || !D || !host || !nav || !body) return;
+var anchor = document.querySelector('nav.vtabs.sub:not(#calc-nav)') || document.querySelector('nav.vtabs');
+if (anchor) anchor.after(nav);   // sits under the main tabs, like the Stock Screener tools bar
+var esc = D.esc;
+var shared = { wacc: null };   // values passed between calculators in this browser session only
+
+/* ---------- formatting helpers ---------- */
+var nf2 = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function rs(n) { if (n == null || !isFinite(n)) return '\u2013'; return (n < 0 ? '-Rs ' : 'Rs ') + nf2.format(Math.abs(n)); }
+function n2(n) { return n == null || !isFinite(n) ? '\u2013' : nf2.format(n); }
+function pct(n, d) { return n == null || !isFinite(n) ? '\u2013' : n.toFixed(d == null ? 2 : d) + '%'; }
+function whole(n) { return D.fmt(n, 0); }
+function P(s) { var t = String(s == null ? '' : s).trim().replace(/,/g, ''), n = parseFloat(t); return t !== '' && isFinite(n) ? n / 100 : s; }  /* percent input -> fraction */
+function H(label, value, sub) { return '<div class="chd"><small>' + label + '</small><div class="cbig">' + value + '</div>' + (sub ? '<div class="csub">' + sub + '</div>' : '') + '</div>'; }
+function S(items) { return '<div class="cs">' + items.map(function (a) { return '<div><small>' + a[0] + '</small><b' + (a[2] ? ' class="' + a[2] + '"' : '') + '>' + a[1] + '</b></div>'; }).join('') + '</div>'; }
+function T(head, rows, cls) {
+  return '<div class="ct"><table' + (cls ? ' class="' + cls + '"' : '') + '><thead><tr>' + head.map(function (h) { return '<th>' + h + '</th>'; }).join('') + '</tr></thead><tbody>' +
+    rows.map(function (r) { return '<tr>' + r.map(function (c) { return '<td>' + c + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>';
+}
+function KV(rows) { return '<div class="ckv">' + rows.map(function (a) { return '<span>' + a[0] + '</span><span>' + a[1] + '</span>'; }).join('') + '</div>'; }
+function B(text, kind) { return '<span class="badge ' + (kind || '') + '">' + text + '</span>'; }
+function sec(title, inner) { return '<h4 class="csec">' + title + '</h4>' + inner; }
+function sgn(n) { return n > 0 ? 'u' : n < 0 ? 'd' : ''; }
+function feeNote() {
+  var R = E.RATES, sl = R.brokerage.slabs, prev = 0, lines = sl.map(function (s) {
+    var t = s[0] === Infinity ? 'above Rs ' + whole(prev) : (prev ? 'Rs ' + whole(prev) + ' to ' : 'up to ') + (prev ? 'Rs ' : 'Rs ') + whole(s[0]);
+    if (!prev && s[0] !== Infinity) t = 'up to Rs ' + whole(s[0]);
+    prev = s[0]; return t + ': ' + (s[1] * 100).toFixed(2) + '%';
+  });
+  return '<details class="cdet"><summary>Fee schedule used</summary><p>Brokerage: ' + lines.join('; ') + '. Minimum brokerage Rs ' + R.brokerage.minFee + ' on transactions up to Rs ' + whole(R.brokerage.minFeeUpTo) +
+    '. SEBON fee ' + (R.sebon * 100).toFixed(3) + '%. DP charge Rs ' + R.dp + ' per transaction. Brokers may charge differently; confirm with your broker.</p></details>';
+}
+
+function FORM(lines) { return '<div class="cform"><b>How it is calculated</b><ul>' + lines.map(function (l) { return '<li>' + l + '</li>'; }).join('') + '</ul></div>'; }
+function WARN(list) { return (list || []).map(function (w) { return '<div class="cwarn" role="note">' + esc(w) + '</div>'; }).join(''); }
+function isoDaysAgo(n) { var d = new Date(Date.now() + 345 * 60000 - n * 86400000); return d.getUTCFullYear() + '-' + ('0' + (d.getUTCMonth() + 1)).slice(-2) + '-' + ('0' + d.getUTCDate()).slice(-2); }
+function pnl(n) { return '<span class="' + (n > 0 ? 'u' : n < 0 ? 'd' : '') + '">' + rs(n) + '</span>'; }
+var DISC = 'Estimates for information only, not investment, tax or legal advice. Confirm current fees and tax rates with SEBON, NEPSE, your broker or the Inland Revenue Department.';
+
+var LABELS = { stock_purchase_price: 'Purchase price', own_cash: 'Own cash', broker_loan: 'Broker loan', maintenance_margin: 'Maintenance margin (use a percentage such as 20)', current_ltp: 'Current price', min_initial_margin: 'Minimum initial margin', warning_buffer: 'Warning buffer', high: 'High', low: 'Low', open_price: 'Open', close_price: 'Close' };
+function nice(m) { return String(m).replace(/^([a-z_]+): /, function (all, k) { return (LABELS[k] || k) + ': '; }); }
+function copyText(btn) {
+  var src = btn.closest('.nwbox').querySelector('.nwtxt'), text = src.textContent, done = function () { var t = btn.textContent; btn.textContent = 'Copied'; setTimeout(function () { btn.textContent = t; }, 1500); };
+  function fallback() { var ta = document.createElement('textarea'); ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); done(); } catch (e) { /* ignore */ } document.body.removeChild(ta); }
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done, fallback); else fallback();
+}
+/* ---------- generic form calculator ---------- */
+function fv(f) { return typeof f.value === 'function' ? f.value() : f.value; }
+function ensureNum(x) { return x == null || x === '' || !isFinite(x) ? null : +x; }
+function formCalc(def) {
+  return function (el) {
+    var pre = 'c_' + def.id + '_';
+    function fieldHtml(f) {
+      var id = pre + f.id, val = fv(f), lab = '<label for="' + id + '">' + f.label + (f.hint ? ' <span class="hint">' + f.hint + '</span>' : '') + '</label>', inner;
+      if (f.tip) lab = '<div class="lbrow">' + lab + '<button type="button" class="tipbtn" aria-label="What does this mean?" aria-expanded="false">?</button></div><div class="tipbox" hidden>' + f.tip + '</div>';
+      if (f.kind === 'sel') inner = lab + '<select id="' + id + '">' + f.opts.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (String(o[0]) === String(val) ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>';
+      else if (f.kind === 'chk') inner = '<label class="chk"><input id="' + id + '" type="checkbox"' + (val ? ' checked' : '') + '> ' + f.label + '</label>';
+      else if (f.kind === 'txt') inner = lab + '<input id="' + id + '" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="' + (f.placeholder || '') + '" value="' + (val == null ? '' : val) + '">';
+      else if (f.kind === 'date') inner = lab + '<input id="' + id + '" type="date" value="' + (val || '') + '">';
+      else if (f.kind === 'sym') inner = lab + '<input id="' + id + '" type="text" list="syms" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="e.g. NABIL">';
+      else inner = lab + '<input id="' + id + '" type="number" inputmode="decimal" step="' + (f.step || 'any') + '"' + (f.min != null ? ' min="' + f.min + '"' : '') + (f.max != null ? ' max="' + f.max + '"' : '') + ' value="' + (val == null ? '' : val) + '">';
+      return '<div class="fld" data-f="' + f.id + '"' + (f.showIf ? ' data-show="' + f.showIf + '"' : '') + (f.showWhen ? ' data-showwhen=\'' + JSON.stringify(f.showWhen) + '\'' : '') + '>' + inner + (f.extra ? '<div class="fx" id="' + pre + f.id + '_x"></div>' : '') + '</div>';
+    }
+    var main = def.fields.filter(function (f) { return !f.adv; }), adv = def.fields.filter(function (f) { return f.adv; });
+    el.innerHTML = '<div class="chead"><h2>' + def.name + '</h2><p>' + def.blurb + '</p></div>' +
+      (def.warn ? '<div class="cwarn" role="note">' + def.warn + '</div>' : '') +
+      '<div class="cgrid"><section class="cc" aria-label="Inputs"><h3>Inputs</h3>' +
+      (def.examples ? '<div class="chips" role="group" aria-label="Load an example">' + def.examples.map(function (x, k) { return '<button type="button" class="chip" data-ex="' + k + '">' + x.label + '</button>'; }).join('') + '</div>' : '') +
+      main.map(fieldHtml).join('') +
+      (adv.length ? '<details class="cdet"><summary>' + (def.advTitle || 'Advanced') + '</summary>' + adv.map(fieldHtml).join('') + '</details>' : '') +
+      '<div class="symmsg" id="' + pre + 'msg" role="status"></div>' +
+      '<div class="cact"><button type="button" class="cbtn primary" data-act="calc">Calculate</button><button type="button" class="cbtn" data-act="reset">Reset</button></div></section>' +
+      '<section class="cc" aria-label="Result" aria-live="polite"><h3>Result</h3><div id="' + pre + 'out"></div></section></div>' +
+      (def.notes ? '<div class="cnote">' + (typeof def.notes === 'function' ? def.notes() : def.notes) + '</div>' : '') + '<p class="cdisc">' + DISC + '</p>';
+    var out = el.querySelector('#' + pre + 'out'), msg = el.querySelector('#' + pre + 'msg');
+    function $f(id) { return el.querySelector('#' + pre + id); }
+    function read() {
+      var v = {}; def.fields.forEach(function (f) { var n = $f(f.id); v[f.id] = f.kind === 'chk' ? n.checked : n.value; }); return v;
+    }
+    function write(vals) { Object.keys(vals).forEach(function (k) { var n = $f(k); if (!n) return; if (n.type === 'checkbox') n.checked = !!vals[k]; else n.value = vals[k]; }); }
+    function vis() {
+      el.querySelectorAll('[data-show]').forEach(function (d) { d.hidden = !$f(d.getAttribute('data-show')).checked; });
+      el.querySelectorAll('[data-showwhen]').forEach(function (d) { var w = JSON.parse(d.getAttribute('data-showwhen')); d.hidden = w['in'].indexOf($f(w.id).value) < 0; });
+    }
+    function run() {
+      vis();
+      try { out.innerHTML = def.run(read()); }
+      catch (e) {
+        if (e && e.name === 'CalculatorInputError') out.innerHTML = e.blank ? '<div class="cwarn" role="alert"><b>Enter required data:</b> ' + esc(nice(e.field)) + '</div>' : '<div class="cerr" role="alert">Please check: ' + esc(nice(e.message)) + '</div>';
+        else { if (window.console) console.error('calculator ' + def.id, e); out.innerHTML = '<div class="cerr" role="alert">This input could not be calculated. Please review the values.</div>'; }
+      }
+    }
+    function defaults() { var o = {}; def.fields.forEach(function (f) { o[f.id] = f.kind === 'sym' ? '' : fv(f); }); return o; }
+    var api = { set: function (id, val) { var n = $f(id); if (n) n.value = val; }, run: run, el: el, $f: $f, read: read };
+    el.addEventListener('input', function (e) { if (e.target.id === pre + 'sym' && def.fill) trySym(true); run(); });
+    el.addEventListener('change', function (e) { if (e.target.id === pre + 'sym' && def.fill) trySym(false); run(); });
+    el.addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.copy != null) { copyText(b); return; }
+      if (b.classList.contains('tipbtn')) { var tb = b.closest('.fld').querySelector('.tipbox'); tb.hidden = !tb.hidden; b.setAttribute('aria-expanded', !tb.hidden); return; }
+      if (b.dataset.act === 'calc') { run(); return; }
+      if (b.dataset.ex != null) { write(def.examples[+b.dataset.ex].values); msg.textContent = ''; run(); }
+      else if (b.dataset.act === 'reset') { write(defaults()); msg.textContent = ''; run(); }
+      else if (def.onClick && b.dataset.act) { def.onClick(b.dataset.act, api); }
+    });
+    function trySym(quiet) {
+      var s = ($f('sym').value || '').trim(), r = s ? D.find(s) : null;
+      if (!r) { msg.textContent = (s && !quiet) ? 'Company not found in the screener data. Enter the values manually.' : ''; return; }
+      var vals = def.fill(r), o = {};
+      Object.keys(vals).forEach(function (k) { var x = ensureNum(vals[k]); if (x != null) o[k] = Math.round(x * 100) / 100; });
+      if (!Object.keys(o).length) { msg.textContent = 'No price data for this company in the screener. Enter the values manually.'; return; }
+      var names = Object.keys(o).map(function (k) { var f = def.fields.filter(function (x) { return x.id === k; })[0]; return f ? String(f.label).replace(/<[^>]*>/g, '').replace(/\s*\(.*$/, '').toLowerCase() : k; });
+      write(o); msg.textContent = (def.fillMsg ? def.fillMsg(r, o) : 'Loaded ' + names.join(', ')) + ' (screener data' + (D.date ? ' as of ' + esc(D.date) : '') + '). You can edit any value.';
+    }
+    if (def.after) def.after(api);
+    run();
+  };
+}
+var SYMF = { id: 'sym', kind: 'sym', label: 'Company <span class="hint">optional, fills the latest price</span>' };
+var fillLtp = function (map) { return function (r) { var o = {}, p = D.g(r, 'LTP'); Object.keys(map).forEach(function (k) { o[k] = p; }); return o; }; };
+
+/* ---------- calculator definitions ---------- */
+var CALCS = [];
+function reg(group, def, extra) { def.group = group; CALCS.push(Object.assign({ id: def.id, name: def.name, blurb: def.blurb, group: group, badge: def.badge || '', render: formCalc(def) }, extra || {})); }
+
+/* BUY */
+reg('trade', {
+  id: 'buy', name: 'Buy Cost', blurb: 'Total cost of buying shares on NEPSE: brokerage, SEBON fee and DP charge, with the effective cost per share.',
+  fields: [SYMF,
+    { id: 'price', label: 'Buy price (Rs per share)', value: 500, step: '0.01' },
+    { id: 'qty', label: 'Quantity (kitta)', value: 100, step: '1' },
+    { id: 'inv', kind: 'sel', label: 'Investor type', value: 'Individual', opts: [['Individual', 'Individual'], ['Institutional', 'Institutional'], ['Government', 'Government']] }],
+  examples: [{ label: '100 @ Rs 500', values: { price: 500, qty: 100 } }, { label: '5,000 @ Rs 1,200', values: { price: 1200, qty: 5000 } }],
+  fill: fillLtp({ price: 1 }),
+  run: function (v) {
+    var r = E.calculateBuy({ stock_price: v.price, quantity: v.qty, investor_type: v.inv });
+    return H('Total purchase cost', rs(r.total_purchase_cost), 'Effective cost per share: <b>' + rs(r.effective_cost_per_share) + '</b>') +
+      S([['Gross value', rs(r.gross_transaction_value)], ['Brokerage (' + r.brokerage_rate + '%)', rs(r.brokerage_charge)], ['SEBON fee', rs(r.sebon_fee)], ['DP charge', rs(r.dp_charge)]]);
+  },
+  notes: function () { return feeNote() + '<p>The effective cost per share is the break-even starting point; selling costs and capital gains tax come on top (see Sell &amp; CGT).</p>'; }
+});
+
+/* SELL */
+reg('trade', {
+  id: 'sell', name: 'Sell &amp; CGT', blurb: 'Net cash from selling shares after brokerage, SEBON fee, DP charge and capital gains tax, with profit after tax.',
+  badge: 'Confirm CGT',
+  warn: '<b>Check the CGT rate.</b> The capital gains tax rates below are editable defaults and may not reflect the latest budget or Finance Act changes. Confirm the rate that applies to you before relying on this result.',
+  fields: [SYMF,
+    { id: 'price', label: 'Sell price (Rs per share)', value: 600, step: '0.01' },
+    { id: 'qty', label: 'Quantity (kitta)', value: 100, step: '1' },
+    { id: 'cost', label: 'Purchase cost per share (Rs)', hint: 'WACC', value: 500, step: '0.01', extra: true },
+    { id: 'inv', kind: 'sel', label: 'Investor type', value: 'Individual', opts: [['Individual', 'Individual'], ['Institutional', 'Institutional']] },
+    { id: 'hold', kind: 'sel', label: 'Holding period', value: '\u2264 365 Days', opts: [['\u2264 365 Days', '365 days or less'], ['> 365 Days', 'More than 365 days']] },
+    { id: 'dp', kind: 'chk', label: 'DP charge applies', value: true },
+    { id: 'cs', label: 'CGT: individual, up to 365 days (%)', value: function () { return E.RATES.cgt.individual_short * 100; }, step: 'any', adv: true },
+    { id: 'cl', label: 'CGT: individual, over 365 days (%)', value: function () { return E.RATES.cgt.individual_long * 100; }, step: 'any', adv: true },
+    { id: 'ci', label: 'CGT: institutional (%)', value: function () { return E.RATES.cgt.institutional * 100; }, step: 'any', adv: true }],
+  advTitle: 'Capital gains tax rates (editable)',
+  examples: [{ label: '100: Rs 500 \u2192 Rs 600', values: { price: 600, qty: 100, cost: 500 } }, { label: 'Loss example', values: { price: 450, qty: 100, cost: 500 } }],
+  fill: fillLtp({ price: 1 }),
+  after: function (api) {
+    var x = api.el.querySelector('#c_sell_cost_x');
+    function paint() { var key = String(shared.wacc); if (x.dataset.w === key) return; x.dataset.w = key; x.innerHTML = shared.wacc ? '<button type="button" class="cbtn small" data-act="usewacc">Use WACC from Averaging (Rs ' + n2(shared.wacc) + ')</button>' : ''; }
+    paint(); api.el.addEventListener('focusin', paint);
+  },
+  onClick: function (act, api) { if (act === 'usewacc' && shared.wacc) { api.set('cost', shared.wacc); api.run(); } },
+  run: function (v) {
+    var cg = { individual_short: P(v.cs), individual_long: P(v.cl), institutional: P(v.ci) };
+    ['individual_short', 'individual_long', 'institutional'].forEach(function (k) { E.num(cg[k], 'CGT rate', { min: 0, max: 1 }); });
+    var r = E.calculateSell({ sell_price: v.price, quantity: v.qty, purchase_cost_per_share: v.cost, investor_type: v.inv, holding_period: v.hold, dp_applicable: v.dp }, cg);
+    return H('Net cash received', rs(r.net_cash_received), 'Net profit after CGT: <b class="' + sgn(r.net_profit_after_cgt) + '">' + rs(r.net_profit_after_cgt) + '</b>') +
+      S([['Gross sales value', rs(r.gross_sales_value)], ['Purchase cost', rs(r.purchase_cost)], ['Broker commission (' + r.brokerage_rate + '%)', rs(r.broker_commission)], ['SEBON fee', rs(r.sebon_fee)],
+        ['DP charge', rs(r.dp_charge)], ['Total selling fees', rs(r.total_selling_fees)], ['Profit before CGT', rs(r.net_profit_before_cgt), sgn(r.net_profit_before_cgt)], ['CGT (' + r.cgt_rate + '%)', rs(r.capital_gains_tax)]]);
+  },
+  notes: function () { return feeNote() + '<p>CGT is applied only when profit after selling fees is positive.</p>'; }
+});
+
+/* AVERAGING (custom UI) */
+CALCS.push({ id: 'averaging', group: 'trade', name: 'Averaging (WACC)', badge: '',
+  blurb: 'Weighted average cost per share across several purchases: secondary market, IPO and bonus batches.',
+  render: function (el) {
+    var rows = [['Secondary', 1000, 500], ['Secondary', 1000, 450], ['Secondary', 800, 420]];
+    function draw() {
+      el.querySelector('#av_rows').innerHTML = rows.map(function (r, k) {
+        return '<tr><td>' + (k + 1) + '</td><td><select data-k="' + k + '" data-c="0" aria-label="Batch ' + (k + 1) + ' type">' + ['Secondary', 'IPO', 'Bonus'].map(function (t) { return '<option' + (t === r[0] ? ' selected' : '') + '>' + t + '</option>'; }).join('') + '</select></td>' +
+          '<td><input type="number" inputmode="decimal" step="1" data-k="' + k + '" data-c="1" value="' + r[1] + '" aria-label="Batch ' + (k + 1) + ' quantity"></td>' +
+          '<td><input type="number" inputmode="decimal" step="0.01" data-k="' + k + '" data-c="2" value="' + r[2] + '" aria-label="Batch ' + (k + 1) + ' price"></td>' +
+          '<td><button type="button" class="cbtn small" data-rm="' + k + '" aria-label="Remove batch ' + (k + 1) + '">&times;</button></td></tr>';
+      }).join('');
+    }
+    el.innerHTML = '<div class="chead"><h2>Averaging (WACC)</h2><p>Weighted average cost per share across several purchases: secondary market, IPO and bonus batches.</p></div>' +
+      '<div class="cgrid"><section class="cc" aria-label="Batches"><h3>Purchase batches</h3><div class="ct"><table class="avt"><thead><tr><th>#</th><th>Type</th><th>Quantity</th><th>Price (Rs)</th><th></th></tr></thead><tbody id="av_rows"></tbody></table></div>' +
+      '<div class="cact"><button type="button" class="cbtn" id="av_add">+ Add batch</button><button type="button" class="cbtn" id="av_reset">Reset</button></div></section>' +
+      '<section class="cc" aria-live="polite"><h3>Result</h3><div id="av_out"></div></section></div>' +
+      '<div class="cnote">' + feeNote() + '<p>Secondary-market batches include broker commission and SEBON fee. IPO and bonus batches carry no fees. A bonus batch adds shares at zero cost, which lowers the average. Enter bonus batches with price 0.</p></div><p class="cdisc">' + DISC + '</p>';
+    var out = el.querySelector('#av_out');
+    function run() {
+      try {
+        var used = rows.filter(function (x) { return !(String(x[1]).trim() === '' && String(x[2]).trim() === ''); });
+        if (!used.length) { shared.wacc = null; out.innerHTML = '<p class="cmu">Enter at least one batch.</p>'; return; }
+        var r = E.calculateWacc(used.map(function (x, k) { return { batch_no: k + 1, type: x[0], quantity: x[1], purchase_price: x[2] }; }));
+        shared.wacc = r.wacc > 0 ? r.wacc : null;
+        out.innerHTML = H('Weighted average cost per share', rs(r.wacc), 'Total quantity ' + whole(r.total_quantity) + ' kitta &middot; total cost ' + rs(r.total_cost)) +
+          T(['#', 'Type', 'Qty', 'Gross', 'Broker', 'SEBON', 'Total cost'], r.batches.map(function (b) {
+            return [b.batch_no, b.type, whole(b.quantity), n2(b.gross_value), n2(b.broker_fee), n2(b.sebon_fee), b.counted ? n2(b.total_investment_cost) : '<span class="cmu">not counted</span>'];
+          })) + (r.wacc > 0 ? '<p class="cnote">This WACC is available in <b>Sell &amp; CGT</b> via the &ldquo;Use WACC&rdquo; button.</p>' : '');
+      } catch (e) { out.innerHTML = '<div class="cerr" role="alert">Please check: ' + esc(e.message) + '</div>'; }
+    }
+    el.addEventListener('input', function (e) { var t = e.target; if (t.dataset.k == null) return; var c = +t.dataset.c; rows[+t.dataset.k][c] = c === 0 ? t.value : t.value; run(); });
+    el.addEventListener('change', function (e) { var t = e.target; if (t.dataset.k == null) return; if (+t.dataset.c === 0) { rows[+t.dataset.k][0] = t.value; run(); } });
+    el.addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      if (b.id === 'av_add') { if (rows.length < 20) { rows.push(['Secondary', '', '']); draw(); run(); } }
+      else if (b.id === 'av_reset') { rows = [['Secondary', 1000, 500], ['Secondary', 1000, 450], ['Secondary', 800, 420]]; draw(); run(); }
+      else if (b.dataset.rm != null && rows.length > 1) { rows.splice(+b.dataset.rm, 1); draw(); run(); }
+    });
+    draw(); run();
+  } });
+
+/* MARGIN CALL */
+reg('trade', {
+  id: 'margin', name: 'Margin Call', blurb: 'Trigger price, cushion and the cash or shares needed to meet maintenance margin on a margin-financed position.',
+  fields: [SYMF,
+    { id: 'price', label: 'Purchase price (Rs per share)', value: 500, step: '0.01' },
+    { id: 'cash', label: 'Own cash (Rs)', value: 300000, step: 'any' },
+    { id: 'loan', label: 'Broker loan (Rs)', value: 700000, step: 'any' },
+    { id: 'mm', label: 'Maintenance margin (%)', value: 20, step: 'any' },
+    { id: 'ltp', label: 'Current price, LTP (Rs)', value: 480, step: '0.01' },
+    { id: 'mi', label: 'Minimum initial margin (%)', value: 30, step: 'any', adv: true },
+    { id: 'wb', label: 'Warning buffer above trigger (%)', value: 5, step: 'any', adv: true }],
+  advTitle: 'Margin rules (editable)',
+  examples: [{ label: 'Rs 500 stock, above trigger', values: { price: 500, cash: 300000, loan: 700000, mm: 20, ltp: 480 } },
+    { label: 'Hydro Rs 700, near trigger', values: { price: 700, cash: 600000, loan: 1400000, mm: 20, ltp: 625 } },
+    { label: 'Bank Rs 350, below trigger', values: { price: 350, cash: 450000, loan: 1050000, mm: 20, ltp: 295 } }],
+  fill: fillLtp({ price: 1, ltp: 1 }),
+  run: function (v) {
+    var r = E.calculateMarginCall({ stock_purchase_price: v.price, own_cash: v.cash, broker_loan: v.loan, maintenance_margin: P(v.mm), current_ltp: v.ltp, min_initial_margin: P(v.mi), warning_buffer: P(v.wb) });
+    var k = r.status === 'SAFE' ? 'ok' : r.status === 'WARNING' ? 'wa' : 'bad';
+    return '<div class="chd"><small>Status</small><div class="cbig">' + B(r.status, k) + '</div><div class="csub">Trigger price <b>' + rs(r.trigger_price) + '</b> &middot; current price ' + rs(+v.ltp) + ' &middot; cushion <b class="' + sgn(r.cushion_above_trigger) + '">' + rs(r.cushion_above_trigger) + ' (' + pct(r.cushion_above_trigger_pct) + ')</b></div></div>' +
+      sec('Position', S([['Buying power', rs(r.total_buying_power)], ['Shares purchased', whole(r.shares_purchased)], ['Purchase value', rs(r.purchase_value)], ['Unused buying power', rs(r.unused_buying_power)], ['Initial margin', pct(r.initial_margin_ratio * 100) + ' ' + (r.initial_margin_check === 'OK' ? B('OK', 'ok') : B('Below minimum', 'bad'))]])) +
+      sec('At the trigger price', S([['Trigger price', rs(r.trigger_price)], ['Fall from purchase price', rs(r.price_fall_to_trigger) + ' (' + pct(r.price_fall_pct) + ')'], ['Portfolio value', rs(r.portfolio_at_trigger)], ['Equity ratio', pct(r.equity_ratio_at_trigger * 100)]])) +
+      sec('At the current price', S([['Portfolio value', rs(r.portfolio_at_ltp)], ['Equity', rs(r.current_equity), sgn(r.current_equity)], ['Equity ratio', pct(r.current_equity_ratio * 100)], ['Loan to value', pct(r.loan_to_value * 100)]])) +
+      sec('To restore maintenance margin', S([['Cash top-up needed', rs(r.cash_top_up)], ['Or shares to sell', r.shares_to_sell == null ? 'Sell all' : whole(r.shares_to_sell)], ['Lowest safe price', rs(r.min_safe_price)]])) +
+      (r.notes.length ? '<ul class="cnotes">' + r.notes.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') + '</ul>' : '');
+  },
+  notes: '<p>The margin rules (minimum initial margin 30%, maintenance margin 20%) are editable defaults. Rules and broker policies can differ and change, so confirm them with your broker.</p>'
+});
+
+/* BONUS */
+reg('corp', {
+  id: 'bonus', name: 'Bonus Price Adjustment', blurb: 'Adjusted price and new quantity after bonus shares, with a check that portfolio value is unchanged.',
+  fields: [SYMF, { id: 'price', label: 'Pre-book-closure price (Rs)', value: 500, step: '0.01' }, { id: 'b', label: 'Bonus (%)', value: 20, step: 'any' }, { id: 'qty', label: 'Shares held (kitta)', value: 100, step: '1' }],
+  examples: [{ label: '20% bonus on 100 @ Rs 500', values: { price: 500, b: 20, qty: 100 } }, { label: '15% bonus on 100', values: { price: 800, b: 15, qty: 100 } }],
+  fill: fillLtp({ price: 1 }),
+  run: function (v) {
+    var r = E.calculateBonus({ market_price: v.price, bonus_percentage: P(v.b), quantity: v.qty });
+    return H('Adjusted price', rs(r.adjusted_price), 'New quantity <b>' + whole(r.new_quantity) + '</b> kitta (+' + whole(r.new_quantity - r.pre_quantity) + ' bonus)') +
+      S([['Price before', rs(r.pre_market_price)], ['Quantity before', whole(r.pre_quantity)], ['Value before', rs(r.pre_portfolio_value)], ['Value after', rs(r.post_portfolio_value)], ['Value check', r.value_verified ? B('Unchanged', 'ok') : B('Differs', 'wa')]]);
+  },
+  notes: '<p>Adjusted price = price &divide; (1 + bonus %). The quantity shown is whole shares only; fractional entitlements are not included.</p>'
+});
+
+/* RIGHT */
+reg('corp', {
+  id: 'right', name: 'Right Price Adjustment', blurb: 'Ex-right adjusted price, extra cash needed and new holding after a right issue.',
+  fields: [SYMF, { id: 'units', label: 'Shares held (kitta)', value: 1000, step: '1' }, { id: 'price', label: 'Pre-closure price (Rs)', value: 600, step: '0.01' },
+    { id: 'rr', label: 'Right ratio (%)', hint: '50 means 1 right share for every 2 held', value: 50, step: 'any' }, { id: 'sp', label: 'Subscription price (Rs per right share)', value: 100, step: '0.01' }],
+  examples: [{ label: '50% right @ Rs 100', values: { units: 1000, price: 600, rr: 50, sp: 100 } }, { label: '25% right @ Rs 100', values: { units: 400, price: 450, rr: 25, sp: 100 } }],
+  fill: fillLtp({ price: 1 }),
+  run: function (v) {
+    var r = E.calculateRight({ initial_units: v.units, market_price: v.price, right_ratio: P(v.rr), subscription_price: v.sp });
+    return H('Adjusted ex-right price', rs(r.adjusted_price), 'Total shares after right: <b>' + n2(r.total_post_shares) + '</b>') +
+      S([['Right shares allotted', n2(r.right_shares_allotted)], ['Additional cash needed', rs(r.additional_cash)], ['Wealth before', rs(r.pre_adjustment_wealth)], ['Total cost basis', rs(r.total_cost_basis)], ['Wealth after', rs(r.post_adjustment_wealth)], ['Value check', r.wealth_verified ? B('Consistent', 'ok') : B('Differs', 'wa')]]);
+  },
+  notes: '<p>Adjusted price = (price + right ratio &times; subscription price) &divide; (1 + right ratio). Allotment is shown unrounded; the actual allotment follows the company&rsquo;s rounding rules.</p>'
+});
+
+/* DIVIDEND */
+reg('corp', {
+  id: 'dividend', name: 'Dividend &amp; TDS', blurb: 'Bonus and cash dividend, tax on both, cash credited and any tax shortfall you must pay.',
+  fields: [SYMF, { id: 'units', label: 'Shares held (kitta)', value: 1000, step: '1' }, { id: 'b', label: 'Bonus dividend (%)', value: 15, step: 'any' }, { id: 'c', label: 'Cash dividend (%)', value: 5.7, step: 'any' },
+    { id: 'fv', label: 'Face value (Rs)', value: 100, step: 'any', adv: true }, { id: 't', label: 'Tax rate on dividend (%)', value: function () { return E.RATES.tds * 100; }, step: 'any', adv: true }],
+  advTitle: 'Face value and tax rate (editable)',
+  examples: [{ label: '15% bonus + 5.7% cash', values: { b: 15, c: 5.7, units: 1000 } }, { label: 'Tax shortfall case', values: { b: 20, c: 1, units: 1000 } }],
+  fill: function (r) { return { b: D.g(r, 'Bonus'), c: D.g(r, 'Cash') }; },
+  fillMsg: function (r) { var fy = D.g(r, 'Div Fiscal Year'); return 'Loaded bonus and cash dividend %' + (fy ? ' for ' + esc(fy) : '') + '; verify against the company notice'; },
+  run: function (v) {
+    var r = E.calculateDividend({ holding_units: v.units, bonus_percentage: P(v.b), cash_dividend_percentage: P(v.c), face_value: v.fv, tds_rate: P(v.t) });
+    return '<div class="chd"><small>Result</small><div class="cbig">' + B(r.status === 'TAX COVERED' ? 'Tax covered' : 'Tax shortfall to pay', r.status === 'TAX COVERED' ? 'ok' : 'bad') + '</div><div class="csub">Net cash credited <b>' + rs(r.net_cash_credited) + '</b>' + (r.out_of_pocket_due > 0 ? ' &middot; pay <b class="d">' + rs(r.out_of_pocket_due) + '</b> from your pocket' : '') + '</div></div>' +
+      sec('Bonus shares', S([['Entitled', n2(r.bonus_shares_entitled)], ['Credited (whole shares)', whole(r.bonus_shares_credited)], ['Fractional', r.fractional_bonus.toFixed(4)], ['Taxable value of bonus', rs(r.bonus_imputed_value)]])) +
+      sec('Cash and tax', S([['Gross cash dividend', rs(r.gross_cash_dividend)], ['Taxable base', rs(r.taxable_income_base)], ['Total tax (' + pct(r.tds_rate * 100) + ')', rs(r.total_tds_payable)], ['Tax on cash', rs(r.tds_on_cash)], ['Tax on bonus', rs(r.tds_on_bonus)]])) +
+      sec('Outcome', S([['Cash after tax', rs(r.cash_after_tds), sgn(r.cash_after_tds)], ['Net cash credited', rs(r.net_cash_credited)], ['Out-of-pocket tax due', rs(r.out_of_pocket_due)], ['Net dividend value after tax', rs(r.net_dividend_value_after_tax)], ['Cash dividend needed to cover tax', pct(r.min_cash_dividend_to_cover_tax * 100, 3)]]));
+  },
+  notes: '<p>Bonus shares and cash dividend are added together as the taxable dividend. The tax rate is an editable default; confirm the rate that applies to you with the Inland Revenue Department or the company.</p>'
+});
+
+/* PIVOT */
+reg('tech', {
+  id: 'pivot', name: 'Pivot Points', blurb: 'Floor, Woodie, Camarilla and DeMark support and resistance levels from a day\u2019s high, low, open and close.',
+  fields: [SYMF, { id: 'h', label: 'High (Rs)', value: 480, step: '0.01' }, { id: 'l', label: 'Low (Rs)', value: 450, step: '0.01' }, { id: 'o', label: 'Open (Rs)', value: 477, step: '0.01' }, { id: 'c', label: 'Close (Rs)', value: 470, step: '0.01' }],
+  examples: [{ label: 'Close < Open', values: { h: 480, l: 450, o: 477, c: 470 } }, { label: 'Close > Open', values: { h: 520, l: 495, o: 500, c: 515 } }, { label: 'Close = Open', values: { h: 312, l: 298, o: 305, c: 305 } }],
+  fill: function (r) { return { h: D.g(r, 'Day High'), l: D.g(r, 'Day Low'), o: D.g(r, 'Open'), c: D.g(r, 'LTP') }; },
+  fillMsg: function () { return 'Loaded the latest day high, low and price; check the open value'; },
+  run: function (v) {
+    var r = E.calculatePivotPoints({ high: v.h, low: v.l, open_price: v.o, close_price: v.c });
+    var cell = function (x) { return x == null ? '<span class="cmu">\u2013</span>' : n2(x); };
+    return H('Pivot (Floor)', rs(r.floor.pp), 'Range ' + rs(r.range) + ' &middot; DeMark case: ' + r.demark_case) +
+      T(['Level', 'Floor', 'Woodie', 'Camarilla', 'DeMark'], r.grid.map(function (g) { return ['<b>' + g.level + '</b>', cell(g.floor), cell(g.woodie), cell(g.camarilla), cell(g.demark)]; }), 'piv');
+  },
+  notes: '<p>Levels are calculated from the previous session\u2019s prices and are a technical-analysis aid, not a prediction or recommendation. R = resistance, S = support, PP = pivot point.</p>'
+});
+
+/* CAGR */
+reg('growth', {
+  id: 'cagr', name: 'CAGR', blurb: 'Compound annual growth rate of an investment, with absolute return and time to double.',
+  fields: [{ id: 'a', label: 'Initial investment (Rs)', value: 100000, step: 'any' }, { id: 'f', label: 'Final value (Rs)', value: 250000, step: 'any' }, { id: 'y', label: 'Duration (years)', value: 5, step: 'any' }],
+  examples: [{ label: 'Rs 1 lakh \u2192 2.5 lakh in 5 yrs', values: { a: 100000, f: 250000, y: 5 } }, { label: 'Loss-making', values: { a: 100000, f: 80000, y: 3 } }],
+  run: function (v) {
+    var r = E.calculateCagr({ initial_investment: v.a, final_value: v.f, duration_years: v.y });
+    var na = function (x, suf) { return typeof x === 'number' ? n2(x) + (suf || '') : 'N/A'; };
+    return H('CAGR', '<span class="' + sgn(r.cagr_pct) + '">' + pct(r.cagr_pct) + '</span>', 'Absolute return ' + pct(r.absolute_return_pct) + ' &middot; growth multiple ' + n2(r.growth_multiple) + '&times;') +
+      S([['Profit / loss', rs(r.profit), sgn(r.profit)], ['Simple annual return', pct(r.simple_annual_return_pct)], ['Years to double at this CAGR', na(r.years_to_double, ' yrs')], ['Rule of 72', na(r.rule_of_72, ' yrs')], ['CAGR needed to double in this time', pct(r.cagr_to_double_pct)]]);
+  },
+  notes: '<p>CAGR = (final value &divide; initial value)<sup>1 &divide; years</sup> &minus; 1. It assumes no additional deposits or withdrawals in between; use XIRR for irregular cash flows.</p>'
+});
+
+/* EMI */
+reg('growth', {
+  id: 'emi', name: 'Loan EMI', blurb: 'Monthly instalment, total interest and repayment schedule for a loan.',
+  fields: [{ id: 'p', label: 'Loan amount (Rs)', value: 2500000, step: 'any' }, { id: 'r', label: 'Interest rate (% per year)', value: 10.5, step: 'any' }, { id: 'y', label: 'Tenure (years)', value: 15, step: 'any' },
+    { id: 'm', kind: 'sel', label: 'Interest method', value: 'reducing', opts: [['reducing', 'Reducing balance (standard EMI)'], ['flat', 'Flat rate']] }],
+  examples: [{ label: 'Rs 25 lakh, 15 yrs, 10.5%', values: { p: 2500000, r: 10.5, y: 15, m: 'reducing' } }, { label: 'Rs 5 lakh, 3 yrs, 12%', values: { p: 500000, r: 12, y: 3, m: 'reducing' } }],
+  run: function (v) {
+    var r = E.calculateEmi({ principal: v.p, annual_interest_rate: P(v.r), tenure_years: v.y, method: v.m }), yrs = [], k, cur;
+    r.schedule.forEach(function (s) { k = Math.ceil(s.month / 12); if (!yrs[k - 1]) yrs[k - 1] = { i: 0, p: 0, b: 0 }; cur = yrs[k - 1]; cur.i += s.interest; cur.p += s.principal; cur.b = s.balance; });
+    return H('Monthly EMI', rs(r.monthly_emi), r.num_installments + ' monthly instalments') + S([['Total interest', rs(r.total_interest)], ['Total repayment', rs(r.total_repayment)]]) +
+      sec('Year-wise summary', T(['Year', 'Principal paid', 'Interest paid', 'Closing balance'], yrs.map(function (y, i) { return [i + 1, n2(y.p), n2(y.i), n2(y.b)]; }))) +
+      '<details class="cdet"><summary>Month-by-month schedule</summary>' + T(['Month', 'Interest', 'Principal', 'Balance'], r.schedule.map(function (s) { return [s.month, n2(s.interest), n2(s.principal), n2(s.balance)]; })) + '</details>';
+  },
+  notes: '<p>Banks and finance companies quote rates in different ways. Use the method stated in your loan offer. Fees, insurance and rate resets are not included.</p>'
+});
+
+/* SIP */
+function sipChart(rows) {
+  var W = 640, H_ = 220, L = 8, Bm = 24, T_ = 8, n = rows.length, max = rows[n - 1].bal, bw = (W - L * 2) / n, g = Math.min(6, bw * 0.25), s = '';
+  rows.forEach(function (r, k) {
+    var x = L + k * bw + g / 2, w = bw - g, hi = (r.inv / max) * (H_ - Bm - T_), hg = Math.max((r.gain / max) * (H_ - Bm - T_), 0);
+    s += '<rect x="' + x.toFixed(1) + '" y="' + (H_ - Bm - hi).toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + hi.toFixed(1) + '" style="fill:var(--ac)"/>';
+    s += '<rect x="' + x.toFixed(1) + '" y="' + (H_ - Bm - hi - hg).toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + hg.toFixed(1) + '" style="fill:var(--ok)"/>';
+    if (n <= 15 || r.y % 5 === 0 || k === n - 1) s += '<text x="' + (x + w / 2).toFixed(1) + '" y="' + (H_ - 8) + '" text-anchor="middle" font-size="11">' + r.y + '</text>';
+  });
+  s += '<line x1="' + L + '" x2="' + (W - L) + '" y1="' + (H_ - Bm) + '" y2="' + (H_ - Bm) + '"/>';
+  return '<svg class="chart" viewBox="0 0 ' + W + ' ' + H_ + '" role="img" aria-label="Yearly growth of invested amount and gain">' + s + '</svg><div class="legend"><span><i class="sw" style="background:var(--ac)"></i>Invested</span><span><i class="sw" style="background:var(--ok)"></i>Gain</span></div>';
+}
+reg('growth', {
+  id: 'sip', name: 'SIP (Mutual Fund)', blurb: 'Estimated future value of regular investments in a mutual fund, with optional yearly step-up and tax on gains.',
+  fields: [{ id: 'f', kind: 'sel', label: 'Investment frequency', value: 12, opts: [[12, 'Monthly'], [4, 'Quarterly'], [2, 'Semi-annually'], [1, 'Annually']] },
+    { id: 'a', label: 'Amount per instalment (Rs)', value: 5000, step: 'any' }, { id: 'r', label: 'Expected return (% a year)', value: 12, step: 'any' }, { id: 'y', label: 'Duration (years)', value: 10, step: '1' },
+    { id: 's', label: 'Yearly step-up (%)', hint: 'optional', value: 0, step: 'any' }, { id: 'tx', kind: 'chk', label: 'Show estimated tax on gains', value: false },
+    { id: 'tr', label: 'Tax rate on gains (%)', hint: 'enter the rate that applies to you', value: 5, step: 'any', showIf: 'tx' }],
+  examples: [{ label: 'Rs 2,000 / 2 yrs', values: { a: 2000, r: 12, y: 2, f: 12, s: 0 } }, { label: 'Rs 1,000 / 10 yrs', values: { a: 1000, r: 12, y: 10, f: 12, s: 0 } }, { label: 'Rs 10,000 + 10% step-up', values: { a: 10000, r: 12, y: 10, f: 12, s: 10 } }],
+  run: function (v) {
+    var r = E.calculateSip({ amount: v.a, rate: v.r, years: v.y, step: v.s, freq: v.f }), tax = '';
+    if (v.tx) {
+      var t = E.num(v.tr, 'Tax rate', { min: 0, max: 100 }), tx = Math.max(r.gain, 0) * t / 100;
+      tax = '<div class="cwarn">Tax on gains at ' + t + '%: <b>' + rs(tx) + '</b> &middot; amount after tax: <b>' + rs(r.maturity - tx) + '</b><br><small>The rate is editable because rules can change. Confirm the current rate with the fund manager or the Inland Revenue Department.</small></div>';
+    }
+    return H('Estimated maturity value', rs(r.maturity)) + S([['Total invested', rs(r.invested)], ['Estimated gain', rs(r.gain), 'u'], ['Gain on investment', pct(r.gain_pct, 1)]]) + tax + sipChart(r.rows) +
+      '<details class="cdet"><summary>Year-by-year schedule</summary>' + T(['Year', 'Instalment', 'Invested', 'Gain', 'Balance'], r.rows.map(function (x) { return [x.y, whole(x.p), whole(x.inv), whole(x.gain), whole(x.bal)]; })) + '</details>';
+  },
+  notes: '<p>Each instalment is invested at the start of its period and earns the periodic rate (annual rate &divide; instalments per year). With a step-up, the instalment rises by that percentage at the start of each new year.</p><p>For illustration only. Mutual fund returns are not fixed or guaranteed, and the result ignores entry or exit loads, fund expenses and NAV movements. Mutual fund investments are subject to market risk; read the scheme document before investing.</p>'
+});
+
+/* UNITS (custom) */
+CALCS.push({ id: 'units', group: 'conv', name: 'Unit Converter', blurb: 'Length, weight, area (with Nepali land units), temperature, speed, data and time.',
+  render: function (el) {
+    var cat = 'area', U = E.UNITS;
+    function opts(C, sel) { return Object.keys(C.u).map(function (k) { return '<option value="' + esc(k) + '"' + (k === sel ? ' selected' : '') + '>' + esc(k) + ' \u2013 ' + esc(C.u[k][0]) + '</option>'; }).join(''); }
+    function draw(keepVal) {
+      var C = U[cat];
+      el.innerHTML = '<div class="chead"><h2>Unit Converter</h2><p>Length, weight, area (with Nepali land units), temperature, speed, data and time.</p></div>' +
+        '<div class="cc"><div class="seg" role="group" aria-label="Category">' + Object.keys(U).map(function (k) { return '<button type="button" class="chip' + (k === cat ? ' on' : '') + '" data-cat="' + k + '" aria-pressed="' + (k === cat) + '">' + U[k].label + '</button>'; }).join('') + '</div>' +
+        '<div class="swap"><div class="fld"><label for="u_v">Value</label><input id="u_v" type="number" inputmode="decimal" step="any" value="' + (keepVal == null ? 1 : keepVal) + '"></div><span></span><div class="fld"><label for="u_r">Result</label><input id="u_r" readonly></div></div>' +
+        '<div class="swap"><div class="fld"><label for="u_f">From</label><select id="u_f">' + opts(C, C.def[0]) + '</select></div><button type="button" class="cbtn" id="u_x" aria-label="Swap units">&#8652;</button><div class="fld"><label for="u_t">To</label><select id="u_t">' + opts(C, C.def[1]) + '</select></div></div>' +
+        '<div id="u_all"></div></div>' + (cat === 'area' ? '<div class="cnote"><p>Hill system: 1 ropani = 16 aana = 64 paisa = 256 dam = 5,476 sq ft. Terai: 1 bigha = 20 kattha = 400 dhur. Official land records may differ slightly.</p></div>' : '');
+      calc();
+    }
+    function calc() {
+      var C = U[cat], v = el.querySelector('#u_v').value, f = el.querySelector('#u_f').value, t = el.querySelector('#u_t').value, r = el.querySelector('#u_r'), all = el.querySelector('#u_all');
+      try { r.value = D.fmt(E.convertUnit(cat, v, f, t), 6); all.innerHTML = '<h4 class="csec">All ' + U[cat].label.toLowerCase() + ' units</h4>' + KV(Object.keys(C.u).map(function (k) { return [esc(k) + ' \u2013 ' + esc(C.u[k][0]), D.fmt(E.convertUnit(cat, v, f, k), 6)]; })); }
+      catch (e) { r.value = ''; all.innerHTML = '<p class="cmu">Enter a value to convert.</p>'; }
+    }
+    el.addEventListener('input', function (e) { if (e.target.id === 'u_v') calc(); });
+    el.addEventListener('change', function (e) { if (e.target.id === 'u_f' || e.target.id === 'u_t') calc(); });
+    el.addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.cat) { cat = b.dataset.cat; draw(el.querySelector('#u_v').value); }
+      else if (b.id === 'u_x') { var f = el.querySelector('#u_f'), t = el.querySelector('#u_t'), x = f.value; f.value = t.value; t.value = x; calc(); }
+    });
+    draw();
+  } });
+
+/* DATE CONVERTER (custom) */
+var B_ = window.BSCore, A_ = window.AgeCore, MON_AD = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+function opt(sel, value, text) { var o = document.createElement('option'); o.value = value; o.textContent = text; sel.appendChild(o); }
+function pad(n) { return (n < 10 ? '0' : '') + n; }
+function nepalToday() { var t = new Date(Date.now() + 345 * 60000); return { y: t.getUTCFullYear(), m: t.getUTCMonth() + 1, d: t.getUTCDate() }; }  /* Nepal time = UTC+5:45 */
+CALCS.push({ id: 'date', group: 'dates', name: 'BS \u21C4 AD Date Converter', blurb: 'Convert between Bikram Sambat (Nepali) and Gregorian (English) dates.',
+  render: function (el) {
+    el.innerHTML = '<div class="chead"><h2>BS \u21C4 AD Date Converter</h2><p>Convert between Bikram Sambat (Nepali) and Gregorian (English) dates.</p></div><div class="cc todaybox" id="dt_today" aria-live="polite"></div>' +
+      '<label class="chk"><input type="checkbox" id="dt_dev"> Show result in Nepali (\u0926\u0947\u0935\u0928\u093E\u0917\u0930\u0940)</label>' +
+      '<div class="cgrid even"><section class="cc"><h3>BS \u2192 AD</h3><p class="cmu">Bikram Sambat (' + B_.FIRST_YEAR + ' \u2013 ' + B_.LAST_YEAR + ')</p><div class="row3"><div class="fld"><label for="dt_by">Year</label><select id="dt_by"></select></div><div class="fld"><label for="dt_bm">Month</label><select id="dt_bm"></select></div><div class="fld"><label for="dt_bd">Day</label><select id="dt_bd"></select></div></div><div class="res" id="dt_rb" role="status"></div></section>' +
+      '<section class="cc"><h3>AD \u2192 BS</h3><p class="cmu">Gregorian (14 Apr 1943 \u2013 13 Apr 2034)</p><div class="row3"><div class="fld"><label for="dt_ay">Year</label><input id="dt_ay" type="number" inputmode="numeric" min="1943" max="2034"></div><div class="fld"><label for="dt_am">Month</label><select id="dt_am"></select></div><div class="fld"><label for="dt_ad">Day</label><input id="dt_ad" type="number" inputmode="numeric" min="1" max="31"></div></div><div class="res" id="dt_ra" role="status"></div></section></div>' +
+      '<div class="cnote"><p>Results use a month-length table for BS ' + B_.FIRST_YEAR + '\u2013' + B_.LAST_YEAR + ' and are a reference only. For legal or official documents, confirm against the official government calendar.</p></div>';
+    var q = function (id) { return el.querySelector('#' + id); };
+    for (var y = B_.FIRST_YEAR; y <= B_.LAST_YEAR; y++) opt(q('dt_by'), y, y);
+    for (var m = 1; m <= 12; m++) { opt(q('dt_bm'), m, m + ' \u2013 ' + B_.MONTHS_EN[m - 1] + ' (' + B_.MONTHS_NE[m - 1] + ')'); opt(q('dt_am'), m, m + ' \u2013 ' + MON_AD[m - 1]); }
+    function dev() { return q('dt_dev').checked; }
+    function dg(n) { return dev() ? B_.toDevanagari(n) : String(n); }
+    function wd(i) { return dev() ? B_.WEEKDAYS_NE[i] : B_.WEEKDAYS_EN[i]; }
+    function days(keep) { var dim = B_.daysInMonth(+q('dt_by').value, +q('dt_bm').value), s = q('dt_bd'); s.innerHTML = ''; for (var d = 1; d <= dim; d++) opt(s, d, d); s.value = Math.min(keep || 1, dim); }
+    function show(id, html, err) { var n = q(id); n.className = 'res' + (err ? ' cerr' : ''); n.innerHTML = html; }
+    function toAd() {
+      try { var r = B_.bsToAd(q('dt_by').value, q('dt_bm').value, q('dt_bd').value), iso = r.year + '-' + pad(r.month) + '-' + pad(r.day);
+        show('dt_rb', '<div class="cbig">' + dg(iso) + '</div><div class="csub">' + dg(r.day) + ' ' + MON_AD[r.month - 1] + ' ' + dg(r.year) + ' &middot; ' + wd(r.weekday) + '</div>'); }
+      catch (e) { show('dt_rb', esc(e.message), true); }
+    }
+    function toBs() {
+      try { var r = B_.adToBs(q('dt_ay').value, q('dt_am').value, q('dt_ad').value);
+        show('dt_ra', '<div class="cbig">' + dg(r.year + '-' + pad(r.month) + '-' + pad(r.day)) + '</div><div class="csub">' + dg(r.day) + ' ' + (dev() ? B_.MONTHS_NE : B_.MONTHS_EN)[r.month - 1] + ' ' + dg(r.year) + ' BS &middot; ' + wd(r.weekday) + '</div>'); }
+      catch (e) { show('dt_ra', esc(e.message), true); }
+    }
+    function today() {
+      var t = nepalToday(), b = B_.adToBs(t.y, t.m, t.d), d = new Date(Date.UTC(t.y, t.m - 1, t.d)).getUTCDay();
+      q('dt_today').innerHTML = '<small>Today (Nepal time)</small><div class="cbig">' + dg(b.year + '-' + pad(b.month) + '-' + pad(b.day)) + ' BS</div><div class="csub">' + dg(b.day) + ' ' + (dev() ? B_.MONTHS_NE : B_.MONTHS_EN)[b.month - 1] + ' ' + dg(b.year) + ' &middot; ' + wd(d) + ' &middot; AD ' + t.y + '-' + pad(t.m) + '-' + pad(t.d) + '</div>';
+    }
+    var t0 = nepalToday(), b0 = B_.adToBs(t0.y, t0.m, t0.d);
+    q('dt_by').value = b0.year; q('dt_bm').value = b0.month; days(b0.day); q('dt_ay').value = t0.y; q('dt_am').value = t0.m; q('dt_ad').value = t0.d;
+    el.addEventListener('change', function (e) { var id = e.target.id; if (id === 'dt_by' || id === 'dt_bm') days(+q('dt_bd').value); if (id.indexOf('dt_b') === 0) toAd(); else if (id.indexOf('dt_a') === 0) toBs(); else { toAd(); toBs(); today(); } });
+    el.addEventListener('input', function (e) { if (e.target.id === 'dt_ay' || e.target.id === 'dt_ad') toBs(); });
+    today(); toAd(); toBs();
+  } });
+
+/* AGE (custom) */
+CALCS.push({ id: 'age', group: 'dates', name: 'Age Calculator', blurb: 'Exact age in years, months and days in AD or BS, with total days, weekday of birth and next birthday.',
+  render: function (el) {
+    el.innerHTML = '<div class="chead"><h2>Age Calculator</h2><p>Exact age in years, months and days in AD or BS, with total days, weekday of birth and next birthday.</p></div>' +
+      '<div class="cgrid"><section class="cc" aria-label="Inputs"><div class="seg" role="group" aria-label="Calendar"><button type="button" class="chip on" id="ag_cAD" aria-pressed="true">AD &middot; English</button><button type="button" class="chip" id="ag_cBS" aria-pressed="false">BS &middot; \u0928\u0947\u092A\u093E\u0932\u0940</button></div>' +
+      '<div class="fld"><label id="ag_l1">Date of birth</label><div id="ag_dAD"><input type="date" id="ag_dob" min="1900-01-01" aria-labelledby="ag_l1"></div><div id="ag_dBS" class="row3" hidden role="group" aria-labelledby="ag_l1"><select id="ag_dY" aria-label="Birth year BS"></select><select id="ag_dM" aria-label="Birth month BS"></select><select id="ag_dD" aria-label="Birth day BS"></select></div></div>' +
+      '<div class="fld"><label id="ag_l2">Calculate age on</label><div id="ag_oAD"><input type="date" id="ag_on" min="1900-01-01" aria-labelledby="ag_l2"></div><div id="ag_oBS" class="row3" hidden role="group" aria-labelledby="ag_l2"><select id="ag_oY" aria-label="Year BS"></select><select id="ag_oM" aria-label="Month BS"></select><select id="ag_oD" aria-label="Day BS"></select></div></div>' +
+      '<div class="cact"><button type="button" class="cbtn" id="ag_today">Today</button></div>' +
+      '<div class="fld" id="ag_leap" hidden><label for="ag_rule">Born on 29 February: in non-leap years count the birthday on</label><select id="ag_rule"><option value="feb28">28 February (common legal convention)</option><option value="mar1">1 March</option></select></div>' +
+      '<label class="chk"><input type="checkbox" id="ag_dev"> \u0928\u0947\u092A\u093E\u0932\u0940 \u0905\u0902\u0915 (Nepali digits)</label></section>' +
+      '<section class="cc" aria-label="Result" aria-live="polite"><h3>Result</h3><div class="cs tiles"><div><small>Years</small><b id="ag_tY">\u2014</b></div><div><small>Months</small><b id="ag_tM">\u2014</b></div><div><small>Days</small><b id="ag_tD">\u2014</b></div><div><small>Weeks old</small><b id="ag_tW">\u2014</b></div></div><div id="ag_panel" class="ckv one"></div></section></div>' +
+      '<div class="cnote"><p>BS support covers ' + B_.FIRST_YEAR + '\u2013' + B_.LAST_YEAR + ' BS (14 Apr 1943 \u2013 13 Apr 2034 AD). In BS mode months and days are counted with BS month lengths, so they can differ by a day or two from the AD result.</p></div>';
+    var q = function (id) { return el.querySelector('#' + id); }, cal = 'AD';
+    ['d', 'o'].forEach(function (k) {
+      for (var y = B_.FIRST_YEAR; y <= B_.LAST_YEAR; y++) opt(q('ag_' + k + 'Y'), y, y);
+      for (var m = 1; m <= 12; m++) opt(q('ag_' + k + 'M'), m, m + ' \u00B7 ' + B_.MONTHS_EN[m - 1]);
+    });
+    function fill(k, keep) { var dim = B_.daysInMonth(+q('ag_' + k + 'Y').value, +q('ag_' + k + 'M').value), s = q('ag_' + k + 'D'); s.innerHTML = ''; for (var d = 1; d <= dim; d++) opt(s, d, d); s.value = Math.min(keep || +s.value || 1, dim); }
+    ['d', 'o'].forEach(function (k) { q('ag_' + k + 'Y').value = 2052; q('ag_' + k + 'M').value = 1; fill(k, 1); });
+    function dev() { return q('ag_dev').checked; }
+    function f(n) { var s = n.toLocaleString('en-US'); return dev() ? B_.toDevanagari(s) : s; }
+    function dtxt(c, p) { var s = c === 'AD' ? p.d + ' ' + MON_AD[p.m - 1].slice(0, 3) + ' ' + p.y : p.d + ' ' + B_.MONTHS_EN[p.m - 1] + ' ' + p.y + ' BS'; return dev() ? B_.toDevanagari(s) : s; }
+    function wd(i) { return dev() ? B_.WEEKDAYS_NE[i] : B_.WEEKDAYS_EN[i]; }
+    function iso(p) { return p.y + '-' + pad(p.m) + '-' + pad(p.d); }
+    function parse(s) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ''); return m ? { y: +m[1], m: +m[2], d: +m[3] } : null; }
+    function a2b(p) { var r = B_.adToBs(p.y, p.m, p.d); return { y: r.year, m: r.month, d: r.day }; }
+    function b2a(p) { var r = B_.bsToAd(p.y, p.m, p.d); return { y: r.year, m: r.month, d: r.day }; }
+    function getP(k) { return cal === 'AD' ? parse(q(k === 'd' ? 'ag_dob' : 'ag_on').value) : { y: +q('ag_' + k + 'Y').value, m: +q('ag_' + k + 'M').value, d: +q('ag_' + k + 'D').value }; }
+    function setP(k, p) { if (cal === 'AD') { q(k === 'd' ? 'ag_dob' : 'ag_on').value = p ? iso(p) : ''; return; } q('ag_' + k + 'Y').value = p.y; q('ag_' + k + 'M').value = p.m; fill(k, p.d); q('ag_' + k + 'D').value = p.d; }
+    function clear() { ['Y', 'M', 'D', 'W'].forEach(function (c) { q('ag_t' + c).textContent = '\u2014'; }); }
+    function err(msg) { clear(); q('ag_panel').innerHTML = '<div class="cerr" role="alert">' + esc(msg) + '</div>'; }
+    function setCal(next) {
+      if (next === cal) return;
+      var dob = getP('d'), on = getP('o');
+      try {
+        var cv = function (p) { return p ? (next === 'BS' ? a2b(p) : b2a(p)) : null; }, nd = cv(dob), no = cv(on);
+        cal = next; q('ag_cAD').setAttribute('aria-pressed', cal === 'AD'); q('ag_cBS').setAttribute('aria-pressed', cal === 'BS');
+        q('ag_cAD').classList.toggle('on', cal === 'AD'); q('ag_cBS').classList.toggle('on', cal === 'BS');
+        q('ag_dAD').hidden = q('ag_oAD').hidden = cal !== 'AD'; q('ag_dBS').hidden = q('ag_oBS').hidden = cal !== 'BS';
+        if (nd) setP('d', nd); else if (cal === 'AD') q('ag_dob').value = '';
+        if (no) setP('o', no);
+      } catch (e) { err('BS mode supports dates from 14 Apr 1943 to 13 Apr 2034 AD. ' + e.message); return; }
+      run();
+    }
+    function run() {
+      var dob = getP('d'), on = getP('o');
+      q('ag_leap').hidden = !(cal === 'AD' && dob && dob.m === 2 && dob.d === 29);
+      if (!dob) { clear(); q('ag_panel').innerHTML = '<span class="cmu">Enter a date of birth to see the age.</span>'; return; }
+      if (!on) { err('Choose the date to calculate the age on.'); return; }
+      try {
+        var r = A_.calculate(cal, dob, on, { leapRule: q('ag_rule').value });
+        q('ag_tY').textContent = f(r.years); q('ag_tM').textContent = f(r.months); q('ag_tD').textContent = f(r.days); q('ag_tW').textContent = f(r.totalWeeks);
+        var other = ''; try { other = cal === 'AD' ? 'Date of birth in BS: ' + dtxt('BS', a2b(dob)) : 'Date of birth in AD: ' + dtxt('AD', b2a(dob)); } catch (e) { other = ''; }
+        var next = r.next ? dtxt(cal, r.next) + ' (' + wd(r.nextWeekday) + ')' : 'beyond supported range';
+        var dn = r.daysToNext === null ? '\u2014' : (r.isBirthday ? (dev() ? '\u0906\u091C!' : 'Today, happy birthday!') : f(r.daysToNext));
+        var rows = [['Total days', f(r.totalDays)], ['Total weeks', f(r.totalWeeks) + (r.extraDays ? ' + ' + f(r.extraDays) + (dev() ? ' \u0926\u093F\u0928' : ' d') : '')], ['Total months', f(r.totalMonths)], ['Born on', wd(r.bornWeekday)], ['Next birthday', next], ['Days to next birthday', dn]];
+        q('ag_panel').innerHTML = KV(rows.map(function (x) { return [esc(x[0]), esc(x[1])]; })) + (other ? '<p class="cmu">' + esc(other) + '</p>' : '');
+      } catch (e) { err(e.message); }
+    }
+    el.addEventListener('change', function (e) {
+      var id = e.target.id;
+      if (/^ag_[do][YM]$/.test(id)) fill(id.charAt(3));
+      run();
+    });
+    el.addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      if (b.id === 'ag_cAD') setCal('AD'); else if (b.id === 'ag_cBS') setCal('BS');
+      else if (b.id === 'ag_today') { var t = nepalToday(); setP('o', cal === 'AD' ? t : a2b(t)); run(); }
+    });
+    setP('o', nepalToday()); run();
+  } });
+
+/* NUMBERS TO WORDS */
+function nwBox(label, text, lang) { return '<div class="nwbox"><div class="nwh"><small>' + label + '</small><button type="button" class="cbtn small" data-copy="1">Copy</button></div><div class="nwtxt" lang="' + lang + '">' + esc(text) + '</div></div>'; }
+reg('conv', {
+  id: 'numwords', name: 'Numbers to Words', blurb: 'Write an amount in words in English and Nepali (rupees and paisa, lakh\u2013crore system), for cheques, vouchers and letters.',
+  fields: [{ id: 'amt', kind: 'txt', label: 'Amount (Rs)', hint: 'commas and Nepali digits are fine', value: '73269.77', placeholder: 'e.g. 73269.77' }],
+  examples: [{ label: '73,269.77', values: { amt: '73269.77' } }, { label: '50,000', values: { amt: '50000' } }, { label: '1 lakh', values: { amt: '100000' } }, { label: '1,25,00,000', values: { amt: '1,25,00,000' } }, { label: '\u0967\u0968\u0969\u096A (Nepali digits)', values: { amt: '\u0967\u0968\u0969\u096A' } }],
+  run: function (v) {
+    var r = window.NumWords.convert(v.amt);
+    if (r.empty) return '<p class="cmu">Type an amount to see it in words.</p>';
+    if (!r.ok) return '<div class="cerr" role="alert">' + esc(r.error) + '</div>';
+    return nwBox('In English', r.english, 'en') + nwBox('\u0928\u0947\u092A\u093E\u0932\u0940\u092E\u093E', r.nepali, 'ne') + nwBox('In figures', 'Rs ' + r.formatted, 'en') + nwBox('\u0905\u0902\u0915\u092E\u093E', '\u0930\u0941 ' + r.formattedNe, 'ne');
+  },
+  notes: '<p>Up to 15 digits (99 neel), rounded to the nearest paisa. Always read the words back before using them on a cheque or legal document, and check the Nepali spelling against your organisation\u2019s standard.</p>'
+});
+
+/* =====================================================================================
+   TRADING & COSTS, CORPORATE ACTIONS, INVESTMENT & VALUATION calculators (v1.5)
+   ===================================================================================== */
+function spct(n) { return n == null || !isFinite(n) ? '\u2013' : '<span class="' + (n > 0 ? 'u' : n < 0 ? 'd' : '') + '">' + (n > 0 ? '+' : '') + n.toFixed(2) + '%</span>'; }
+function verdictB(v) { return v ? B(v.text, v.kind) : ''; }
+function vsBlock(o) {
+  if (o.upside_pct == null) return '<p class="cmu">Enter the current market price to see upside and margin of safety.</p>';
+  return sec('Against the current price', S([['Current price', rs(o.price)], ['Upside / downside', spct(o.upside_pct)], ['Margin of safety', spct(o.mos_pct)]])) + '<p>' + verdictB(o.verdict) + '</p>';
+}
+var BR = { id: 'br', label: 'Broker commission rate (%)', hint: 'blank = NEPSE slab', value: '', step: 'any', adv: true };
+var DPF = { id: 'dp', label: 'DP charge on sale (Rs)', hint: 'blank = default', value: '', step: 'any', adv: true };
+var CGF = { id: 'cg', label: 'CGT rate override (%)', hint: 'blank = by holding period', value: '', step: 'any', adv: true };
+var T_EPS = 'EPS (earnings per share): the company\u2019s yearly profit divided by its number of shares.', T_BV = 'BVPS (book value per share): net worth (assets minus liabilities) divided by the number of shares.',
+  T_DPS = 'DPS (dividend per share): the cash dividend paid on each share in a year.', T_WACC = 'WACC (weighted average cost of capital): the blended return a company must earn to satisfy its lenders and shareholders. Used here as the discount rate.',
+  T_TG = 'Terminal growth: the steady yearly growth assumed for ever after the projection years. Keep it low, below long-run economic growth.', T_MOS = 'Margin of safety: how far the price is below your estimate of value, as a share of that value. A bigger margin leaves more room for error.',
+  T_RR = 'R:R (reward to risk): how much you could gain for each rupee you risk. An R:R of 2 means a Rs 2 gain target for every Rs 1 at risk.';
+var TRADE_NOTE = '<p>Charges use the Rates &amp; rules panel (commission slabs and minimum, SEBON fee, DP charge on the sell side, CGT). Brokers can charge differently, so enter your broker\u2019s rate under advanced settings if it differs. Results are estimates.</p>';
+var PLAIN_FEES = 'Brokerage = traded value &times; broker rate (at least the minimum); SEBON fee = traded value &times; SEBON rate; DP charge applies once on the sell side.';
+
+/* ---------- A. TRADING & COSTS ---------- */
+reg('trade', {
+  id: 'pl', name: 'Profit / Loss', blurb: 'Net profit or loss on a trade after buy and sell charges and capital gains tax, with return % and holding period.',
+  fields: [SYMF, { id: 'b', label: 'Buy price (Rs per share)', value: 500, step: '0.01' }, { id: 's', label: 'Sell price (Rs per share)', value: 600, step: '0.01' }, { id: 'q', label: 'Quantity (kitta)', value: 100, step: '1' },
+    { id: 'bd', kind: 'date', label: 'Buy date', value: function () { return isoDaysAgo(120); } }, { id: 'sd', kind: 'date', label: 'Sell date', value: function () { return isoDaysAgo(0); } }, BR, DPF, CGF],
+  advTitle: 'Charges and tax overrides (optional)',
+  warn: '<b>Check the CGT rate.</b> CGT follows the Rates &amp; rules panel and may not reflect the latest budget changes. Confirm the rate that applies to you.',
+  fill: fillLtp({ s: 1 }), fillMsg: function () { return 'Loaded the latest price into the sell price'; },
+  run: function (v) {
+    var r = E.calculateProfitLoss({ buy_price: v.b, sell_price: v.s, quantity: v.q, buy_date: v.bd, sell_date: v.sd, broker_rate_pct: v.br, dp_charge: v.dp, cgt_rate_pct: v.cg }), k = r.net_profit_loss > 0 ? 'ok' : r.net_profit_loss < 0 ? 'bad' : 'wa';
+    return '<div class="chd"><small>Net profit / loss</small><div class="cbig">' + pnl(r.net_profit_loss) + '</div><div class="csub">' + B(r.result, k) + ' Net return <b>' + spct(r.return_pct) + '</b> &middot; held ' + r.holding_days + ' days &middot; ' + r.term + '</div></div>' +
+      S([['Total buy cost', rs(r.total_buy_cost)], ['Total sell value', rs(r.total_sell_value)], ['Buy-side charges', rs(r.buy_charges)], ['Sell-side charges (incl. DP)', rs(r.sell_charges)], ['Gross profit / loss', pnl(r.gross_profit_loss)], ['Taxable gain', rs(r.taxable_gain)], ['CGT rate', pct(r.cgt_rate_pct, 2)], ['CGT amount', rs(r.cgt_amount)]]) +
+      FORM([PLAIN_FEES, 'Taxable gain = net sale proceeds &minus; total buy cost (never below zero). CGT = taxable gain &times; rate: 365 days or less, or more than 365 days.', 'Net profit = net sale proceeds &minus; total buy cost &minus; CGT. Return % = net profit &divide; total buy cost.']);
+  },
+  notes: TRADE_NOTE + '<p>If you sell at a loss, no CGT is charged. Holding days are counted from the buy date to the sell date.</p>'
+});
+
+reg('trade', {
+  id: 'breakeven', name: 'Break-Even Price', blurb: 'The lowest sell price that recovers all buy-side and sell-side costs.',
+  fields: [SYMF, { id: 'b', label: 'Buy price (Rs per share)', value: 500, step: '0.01' }, { id: 'q', label: 'Quantity (kitta)', value: 100, step: '1' }, BR, DPF],
+  advTitle: 'Charges (optional)', fill: fillLtp({ b: 1 }),
+  run: function (v) {
+    var r = E.calculateBreakEven({ buy_price: v.b, quantity: v.q, broker_rate_pct: v.br, dp_charge: v.dp });
+    return H('Break-even sell price', rs(r.break_even_price), 'Needs a rise of <b>' + rs(r.price_increase) + '</b> (' + pct(r.price_increase_pct, 2) + ') from your buy price') +
+      S([['Total buy cost', rs(r.total_buy_cost)], ['Sell-side charges at break-even', rs(r.sell_charges)], ['Rise needed per share', rs(r.price_increase)], ['Rise needed', pct(r.price_increase_pct, 2)]]) +
+      FORM([PLAIN_FEES, 'Break-even price = (total buy cost + DP charge) &divide; (quantity &times; (1 &minus; broker rate &minus; SEBON rate)), rounded up to the next paisa.', 'CGT is zero at break-even because there is no gain.']);
+  },
+  notes: TRADE_NOTE
+});
+
+reg('trade', {
+  id: 'target', name: 'Target Sell Price', blurb: 'The sell price needed to reach a net profit (after all charges and CGT) that you choose.',
+  fields: [SYMF, { id: 'b', label: 'Buy price (Rs per share)', value: 500, step: '0.01' }, { id: 'q', label: 'Quantity (kitta)', value: 100, step: '1' },
+    { id: 'mode', kind: 'sel', label: 'I want to set my goal as', value: 'profit', opts: [['profit', 'Net profit in Rs'], ['pct', 'Net return %']] },
+    { id: 'dprofit', label: 'Desired net profit (Rs)', value: 5000, step: 'any', showWhen: { id: 'mode', 'in': ['profit'] } }, { id: 'dpct', label: 'Desired net return (%)', value: 10, step: 'any', showWhen: { id: 'mode', 'in': ['pct'] } },
+    { id: 'bd', kind: 'date', label: 'Buy date', value: function () { return isoDaysAgo(60); } }, { id: 'sd', kind: 'date', label: 'Expected sell date', value: function () { return isoDaysAgo(-60); } }, BR, DPF, CGF],
+  advTitle: 'Charges and tax overrides (optional)', fill: fillLtp({ b: 1 }),
+  run: function (v) {
+    var r = E.calculateTargetSellPrice({ buy_price: v.b, quantity: v.q, mode: v.mode, desired_profit: v.dprofit, desired_return_pct: v.dpct, buy_date: v.bd, sell_date: v.sd, broker_rate_pct: v.br, dp_charge: v.dp, cgt_rate_pct: v.cg });
+    return H('Target sell price', rs(r.target_price), 'A rise of <b>' + pct(r.price_increase_pct, 2) + '</b> from your buy price &middot; ' + r.term) +
+      S([['Required gross profit', rs(r.required_gross_profit)], ['Estimated CGT (' + pct(r.cgt_rate_pct, 2) + ')', rs(r.estimated_cgt)], ['Net profit at this price', pnl(r.net_profit)], ['Desired net profit', rs(r.desired_net_profit)], ['Total buy cost', rs(r.total_buy_cost)]]) +
+      FORM([PLAIN_FEES, 'Before-tax gain needed = desired net profit &divide; (1 &minus; CGT rate), so the tax is covered exactly.', 'Target price = the lowest price (to the paisa) where net sale proceeds reach total buy cost + that gain.']);
+  },
+  notes: TRADE_NOTE + '<p>Net return % is measured on the total buy cost, including buying charges. The CGT rate depends on the buy and expected sell dates.</p>'
+});
+
+reg('trade', {
+  id: 'possize', name: 'Position Size', blurb: 'How many shares to buy so that a stop-loss exit loses no more than your chosen share of capital.',
+  fields: [{ id: 'cap', label: 'Total trading capital (Rs)', value: 1000000, step: 'any' }, { id: 'risk', label: 'Risk per trade (% of capital)', value: 1, step: 'any' }, { id: 'en', label: 'Entry price (Rs)', value: 500, step: '0.01' }, { id: 'sl', label: 'Stop-loss price (Rs)', value: 470, step: '0.01' },
+    { id: 'al', label: 'Maximum allocation to one stock (% of capital)', hint: 'optional', value: '', step: 'any', adv: true }],
+  advTitle: 'Limits (optional)', fill: function (r) { return { en: D.g(r, 'LTP') }; },
+  run: function (v) {
+    var r = E.calculatePositionSize({ total_capital: v.cap, risk_pct: v.risk, entry_price: v.en, stop_loss: v.sl, max_alloc_pct: v.al });
+    return H('Shares to buy', whole(r.shares) + ' kitta', 'Position value <b>' + rs(r.position_size_rs) + '</b> (' + pct(r.position_pct_of_capital, 1) + ' of capital)') + WARN(r.warnings) +
+      S([['Maximum risk amount', rs(r.max_risk_amount)], ['Risk per share', rs(r.risk_per_share)], ['Shares allowed by risk', whole(r.risk_based_shares)], ['Capital needed for that size', rs(r.required_capital)], ['Actual risk amount', rs(r.actual_risk)], ['Actual risk', pct(r.actual_risk_pct, 3)]]) +
+      FORM(['Maximum risk = capital &times; risk %.', 'Risk per share = entry price &minus; stop-loss price.', 'Shares = maximum risk &divide; risk per share, rounded down, then limited by your capital and allocation cap.', 'Charges and slippage are not included, so real losses can be slightly larger.']);
+  },
+  notes: '<p>Assumes a long (buy) position with the stop-loss below the entry price. A stop-loss is not guaranteed to fill at your price.</p>'
+});
+
+reg('trade', {
+  id: 'rr', name: 'Risk / Reward', blurb: 'Risk and reward per share and in total, reward-to-risk ratio, expected value and the win rate you need to break even.',
+  fields: [SYMF, { id: 'en', label: 'Entry price (Rs)', value: 500, step: '0.01' }, { id: 'sl', label: 'Stop-loss price (Rs)', value: 470, step: '0.01' }, { id: 'tg', label: 'Target price (Rs)', value: 575, step: '0.01', tip: T_RR },
+    { id: 'q', label: 'Quantity (kitta)', value: 100, step: '1' }, { id: 'wp', label: 'Win probability (%)', hint: 'optional', value: '', step: 'any' }],
+  fill: fillLtp({ en: 1 }),
+  run: function (v) {
+    var r = E.calculateRiskReward({ entry_price: v.en, stop_loss: v.sl, target_price: v.tg, quantity: v.q, win_probability_pct: v.wp }), ev = r.expected_value_per_share;
+    return H('Reward to risk', '1 : ' + r.rr_ratio.toFixed(2), r.rr_ratio >= 2 ? B('Reward is at least twice the risk', 'ok') : r.rr_ratio >= 1 ? B('Reward exceeds risk', 'wa') : B('Risk exceeds reward', 'bad')) +
+      S([['Risk per share', rs(r.risk_per_share)], ['Reward per share', rs(r.reward_per_share)], ['Total risk', rs(r.total_risk), 'd'], ['Total reward', rs(r.total_reward), 'u'], ['Break-even win rate', pct(r.break_even_win_rate_pct, 1)]]) +
+      (ev == null ? '<p class="cmu">Enter a win probability to see the expected value.</p>' : sec('Expected value', S([['Per share', pnl(ev)], ['Full position', pnl(r.expected_value_total)]]))) +
+      FORM(['Risk per share = entry &minus; stop-loss. Reward per share = target &minus; entry. R:R = reward &divide; risk.', 'Break-even win rate = risk &divide; (risk + reward).', 'Expected value per share = win % &times; reward &minus; (1 &minus; win %) &times; risk.', 'All figures are before brokerage, SEBON fee, DP charge and CGT.']);
+  },
+  notes: '<p>A positive expected value only helps if your win probability is realistic. Probability is your own estimate, not a forecast.</p>'
+});
+
+/* ---------- B. CORPORATE ACTIONS ---------- */
+reg('corp', {
+  id: 'bonusshares', name: 'Bonus Share Calculator', blurb: 'New quantity and new average cost per share after bonus shares. Bonus shares add shares, not cash.',
+  fields: [SYMF, { id: 'q', label: 'Existing quantity (kitta)', value: 1000, step: '1' }, { id: 'a', label: 'Average buy price (Rs)', value: 600, step: '0.01' }, { id: 'b', label: 'Bonus (%)', value: 15, step: 'any' }],
+  fill: fillLtp({ a: 1 }), fillMsg: function () { return 'Loaded the latest price into the average price (replace it with your own cost)'; },
+  run: function (v) {
+    var r = E.calculateBonusShares({ quantity: v.q, avg_price: v.a, bonus_pct: v.b });
+    return H('New average price', rs(r.new_average_price), 'From ' + rs(r.old_average_price) + ' &middot; new quantity <b>' + whole(r.new_quantity) + '</b> kitta') +
+      S([['Bonus shares received', whole(r.bonus_shares)], ['Fractional entitlement', r.fractional.toFixed(4)], ['New total quantity', whole(r.new_quantity)], ['Total investment (unchanged)', rs(r.total_investment)], ['Cost per share before', rs(r.old_average_price)], ['Cost per share after', rs(r.new_average_price)]]) +
+      FORM(['Bonus shares = existing quantity &times; bonus %, whole shares only.', 'New quantity = existing quantity + bonus shares.', 'New average price = total investment &divide; new quantity. No new cash is invested, so the total investment stays the same.']);
+  },
+  notes: '<p>Fractional bonus entitlements are not credited as shares here. For the effect on the market price, use Bonus Price Adjustment.</p>'
+});
+
+reg('corp', {
+  id: 'rightshares', name: 'Right Share Calculator', blurb: 'Right shares you can apply for, the cash needed, and your new quantity and average cost.',
+  fields: [SYMF, { id: 'q', label: 'Existing quantity (kitta)', value: 1000, step: '1' }, { id: 'a', label: 'Average buy price (Rs)', value: 600, step: '0.01' }, { id: 'r', label: 'Right (%)', hint: '50 = 1 right share for every 2 held', value: 50, step: 'any' }, { id: 'p', label: 'Right issue price (Rs)', value: 100, step: '0.01' }],
+  fill: fillLtp({ a: 1 }), fillMsg: function () { return 'Loaded the latest price into the average price (replace it with your own cost)'; },
+  run: function (v) {
+    var r = E.calculateRightShares({ quantity: v.q, avg_price: v.a, right_pct: v.r, right_price: v.p });
+    return H('Cash required', rs(r.cash_required), 'For <b>' + whole(r.right_shares) + '</b> right shares &middot; new quantity <b>' + whole(r.new_quantity) + '</b> kitta') +
+      S([['Right shares eligible', whole(r.right_shares)], ['Fractional entitlement', r.fractional.toFixed(4)], ['New total quantity', whole(r.new_quantity)], ['Total investment', rs(r.total_investment)], ['New average price', rs(r.new_average_price)], ['Change in average price', rs(r.average_change) + ' (' + pct(r.average_change_pct, 2) + ')']]) +
+      FORM(['Right shares = existing quantity &times; right %, whole shares only.', 'Cash required = right shares &times; right issue price.', 'New average price = (old investment + cash required) &divide; new quantity.']);
+  },
+  notes: '<p>This is the cost view. For the effect on the market price, use Right Price Adjustment.</p>'
+});
+
+reg('corp', {
+  id: 'combined', name: 'Bonus + Right Combined', blurb: 'Apply a bonus and a right issue in the order they happen and see the final quantity and average cost.',
+  fields: [SYMF, { id: 'q', label: 'Existing quantity (kitta)', value: 1000, step: '1' }, { id: 'a', label: 'Average price (Rs)', value: 600, step: '0.01' }, { id: 'b', label: 'Bonus (%)', value: 15, step: 'any' }, { id: 'r', label: 'Right (%)', value: 50, step: 'any' }, { id: 'p', label: 'Right issue price (Rs)', value: 100, step: '0.01' },
+    { id: 'o', kind: 'sel', label: 'Order of actions', value: 'bonus_first', opts: [['bonus_first', 'Bonus first, then right'], ['right_first', 'Right first, then bonus']] }, { id: 'm', label: 'Market price before the actions (Rs)', hint: 'optional, for the adjusted price', value: '', step: '0.01', adv: true }],
+  advTitle: 'Adjusted price (optional)', fill: fillLtp({ a: 1, m: 1 }),
+  run: function (v) {
+    var r = E.calculateCombinedActions({ quantity: v.q, avg_price: v.a, bonus_pct: v.b, right_pct: v.r, right_price: v.p, order: v.o, market_price: v.m });
+    return H('Final average price', rs(r.final_average_price), 'Final quantity <b>' + whole(r.final_quantity) + '</b> kitta &middot; total invested <b>' + rs(r.total_investment) + '</b>') +
+      S([['Bonus shares', whole(r.bonus_shares)], ['Right shares', whole(r.right_shares)], ['Cash for right shares', rs(r.cash_required)], ['Final quantity', whole(r.final_quantity)], ['Total investment', rs(r.total_investment)], ['Theoretical adjusted price', r.adjusted_price == null ? 'Enter market price' : rs(r.adjusted_price)]]) +
+      sec('Step by step', T(['Step', 'Shares added', 'Cash', 'Quantity', 'Total investment', 'Average price'], r.steps.map(function (s) { return [esc(s.action), whole(s.added), n2(s.cash), whole(s.quantity), n2(s.total_investment), n2(s.avg)]; }))) +
+      FORM(['Each action works on the quantity left by the one before it, so the order changes the share count.', 'Bonus shares = quantity &times; bonus %; right shares = quantity &times; right %; both whole shares only.', 'Final average price = total investment &divide; final quantity. Only the right issue adds cash.', 'Theoretical adjusted price = (quantity &times; market price + cash paid) &divide; final quantity.']);
+  },
+  notes: '<p>The actual market price after book closure is set by trading. The adjusted price shown is the theoretical value-neutral price.</p>'
+});
+
+reg('corp', {
+  id: 'drip', name: 'Dividend Reinvestment', blurb: 'Shares bought by reinvesting a cash dividend, and your new quantity and weighted average price.',
+  fields: [SYMF, { id: 'q', label: 'Existing quantity (kitta)', value: 1000, step: '1' }, { id: 'a', label: 'Average price (Rs)', value: 600, step: '0.01' }, { id: 'd', label: 'Cash dividend per share (Rs)', value: 5.7, step: '0.01', tip: T_DPS },
+    { id: 'p', label: 'Reinvestment price (Rs)', value: 500, step: '0.01' }, { id: 'pc', label: 'Share of dividend to reinvest (%)', value: 100, step: 'any' }, { id: 'ch', label: 'Charges on the purchase (%)', hint: 'optional, e.g. brokerage', value: '', step: 'any', adv: true }],
+  advTitle: 'Purchase charges (optional)', fill: fillLtp({ p: 1 }),
+  run: function (v) {
+    var r = E.calculateDividendReinvestment({ quantity: v.q, avg_price: v.a, dps: v.d, reinvest_price: v.p, reinvest_pct: v.pc, charge_pct: v.ch });
+    return H('New shares bought', whole(r.new_shares) + ' kitta', 'New quantity <b>' + whole(r.new_quantity) + '</b> &middot; new average price <b>' + rs(r.new_average_price) + '</b>') +
+      S([['Total dividend received', rs(r.total_dividend)], ['Amount reinvested', rs(r.amount_reinvested)], ['Cash used', rs(r.cash_used)], ['Cash left over from reinvested amount', rs(r.remaining_cash)], ['Dividend not reinvested', rs(r.cash_not_reinvested)], ['Share value before', rs(r.value_before)], ['Share value after', rs(r.value_after)], ['Change in share value', pnl(r.value_change)]]) +
+      FORM(['Total dividend = quantity &times; dividend per share (enter the amount you actually receive, after any tax).', 'New shares = amount reinvested &divide; price (including charges), whole shares only.', 'New average price = (old investment + cash used) &divide; new quantity.', 'Share value is measured at the reinvestment price.']);
+  },
+  notes: '<p>Assumes the reinvestment price stays the same for all shares bought. Dividend tax is not deducted unless you enter the net dividend per share.</p>'
+});
+
+/* ---------- C. INVESTMENT & VALUATION ---------- */
+function loadEps(r) { return { price: D.g(r, 'LTP'), eps: D.g(r, 'EPS (Annu.)') }; }
+reg('val', {
+  id: 'graham', name: 'Graham Value', blurb: 'Benjamin Graham\u2019s growth formula for a rough intrinsic value per share.',
+  fields: [SYMF, { id: 'eps', label: 'EPS (Rs)', value: 35, step: '0.01', tip: T_EPS }, { id: 'g', label: 'Expected growth rate (% a year)', hint: 'next 7\u201310 years', value: 6, step: 'any' }, { id: 'y', label: 'Current AAA bond yield (%)', value: 9, step: 'any' }, { id: 'price', label: 'Current market price (Rs)', hint: 'optional', value: '', step: '0.01' }],
+  fill: loadEps,
+  run: function (v) {
+    var r = E.calculateGraham({ eps: v.eps, growth_pct: v.g, bond_yield_pct: v.y, price: v.price });
+    return H('Graham intrinsic value', rs(r.value), r.verdict ? verdictB(r.verdict) : 'Add the current price to compare') + vsBlock(r) +
+      FORM(['Value = EPS &times; (8.5 + 2 &times; growth %) &times; (4.4 &divide; bond yield %).', 'Upside = (value &minus; price) &divide; price. Margin of safety = (value &minus; price) &divide; value.', 'Verdict: more than ' + E.RATES.valuation.fair_band_pct + '% upside = undervalued; within &plusmn;' + E.RATES.valuation.fair_band_pct + '% = fairly valued; otherwise overvalued.']);
+  },
+  notes: '<p>The formula was designed for stable, profitable companies and uses a US bond yield of 4.4% as its base. Use it as one of several checks. Use a Nepal AAA-rated corporate bond yield that you trust.</p>'
+});
+reg('val', {
+  id: 'pe', name: 'P/E Valuation', blurb: 'Fair value from earnings and a target price-to-earnings multiple.',
+  fields: [SYMF, { id: 'eps', label: 'EPS (Rs)', value: 35, step: '0.01', tip: T_EPS }, { id: 'price', label: 'Current market price (Rs)', value: 600, step: '0.01' }, { id: 'pe', label: 'Target or sector average P/E', value: 18, step: 'any' }], fill: loadEps,
+  run: function (v) {
+    var r = E.calculatePeValuation({ eps: v.eps, price: v.price, target_pe: v.pe });
+    return H('Fair value', rs(r.fair_value), verdictB(r.verdict)) + S([['Current P/E', r.current_pe.toFixed(2) + '\u00D7'], ['Target P/E', r.target_pe + '\u00D7'], ['Current price', rs(r.price)], ['Upside / downside', spct(r.upside_pct)]]) +
+      FORM(['Current P/E = price &divide; EPS.', 'Fair value = EPS &times; target P/E.', 'Upside = (fair value &minus; price) &divide; price.']);
+  },
+  notes: '<p>Compare with companies in the same sector. A low P/E can signal a cheap price or falling earnings.</p>'
+});
+reg('val', {
+  id: 'pb', name: 'P/B Valuation', blurb: 'Fair value from book value and a target price-to-book multiple.',
+  fields: [SYMF, { id: 'bv', label: 'Book value per share (Rs)', value: 250, step: '0.01', tip: T_BV }, { id: 'price', label: 'Current market price (Rs)', value: 450, step: '0.01' }, { id: 'pb', label: 'Target or sector average P/B', value: 2, step: 'any' }],
+  fill: function (r) { var pb = D.g(r, 'P/B'), p = D.g(r, 'LTP'); return { price: p, bv: pb > 0 ? p / pb : null }; }, fillMsg: function () { return 'Loaded the latest price and book value (price divided by P/B)'; },
+  run: function (v) {
+    var r = E.calculatePbValuation({ bvps: v.bv, price: v.price, target_pb: v.pb });
+    return H('Fair value', rs(r.fair_value), verdictB(r.verdict)) + S([['Current P/B', r.current_pb.toFixed(2) + '\u00D7'], ['Target P/B', r.target_pb + '\u00D7'], ['Current price', rs(r.price)], ['Upside / downside', spct(r.upside_pct)]]) +
+      FORM(['Current P/B = price &divide; book value per share.', 'Fair value = book value per share &times; target P/B.', 'Upside = (fair value &minus; price) &divide; price.']);
+  },
+  notes: '<p>P/B suits banks, insurers and other asset-heavy companies best. Compare within the same sector.</p>'
+});
+reg('val', {
+  id: 'divyield', name: 'Dividend Yield', blurb: 'Dividend yield, yield on your cost and expected dividend income.',
+  fields: [SYMF, { id: 'd', label: 'Annual dividend per share (Rs)', value: 15, step: '0.01', tip: T_DPS }, { id: 'price', label: 'Current market price (Rs)', value: 600, step: '0.01' }, { id: 'a', label: 'Your average buy price (Rs)', hint: 'optional', value: '', step: '0.01' },
+    { id: 'q', label: 'Quantity (kitta)', hint: 'optional', value: '', step: '1' }, { id: 'f', kind: 'sel', label: 'Dividend paid', value: 'annual', opts: [['annual', 'Once a year'], ['semi', 'Twice a year'], ['quarterly', 'Quarterly']] }],
+  fill: function (r) { return { price: D.g(r, 'LTP') }; },
+  run: function (v) {
+    var r = E.calculateDividendYield({ dps: v.d, price: v.price, avg_price: v.a, quantity: v.q, frequency: v.f });
+    return H('Dividend yield', pct(r.dividend_yield_pct, 2), r.yield_on_cost_pct == null ? 'Enter your average buy price to see the yield on cost' : 'Yield on your cost: <b>' + pct(r.yield_on_cost_pct, 2) + '</b>') +
+      (r.annual_income == null ? '<p class="cmu">Enter your quantity to see dividend income.</p>' : S([['Annual dividend income', rs(r.annual_income)], ['Income per payment (' + r.payments_per_year + ' a year)', rs(r.per_payment_income)]])) +
+      FORM(['Dividend yield = annual dividend per share &divide; current price.', 'Yield on cost = annual dividend per share &divide; your average buy price.', 'Annual income = dividend per share &times; quantity.']);
+  },
+  notes: '<p>Dividends are not guaranteed. Dividend tax is not deducted here.</p>'
+});
+reg('val', {
+  id: 'ddm', name: 'Dividend Discount Model', blurb: 'Value a share from its expected, steadily growing dividends.',
+  fields: [SYMF, { id: 'd0', label: 'Current annual dividend per share (Rs)', value: 15, step: '0.01', tip: T_DPS }, { id: 'g', label: 'Expected dividend growth (% a year)', value: 4, step: 'any' }, { id: 'r', label: 'Required rate of return (%)', value: 13, step: 'any' }, { id: 'price', label: 'Current market price (Rs)', hint: 'optional', value: '', step: '0.01' }],
+  fill: function (r) { return { price: D.g(r, 'LTP') }; },
+  run: function (v) {
+    var r = E.calculateDdm({ d0: v.d0, growth_pct: v.g, required_pct: v.r, price: v.price });
+    return H('Intrinsic value', rs(r.value), r.verdict ? verdictB(r.verdict) : 'Add the current price to compare') + S([['Next-year dividend', rs(r.next_dividend)]]) + vsBlock(r) +
+      FORM(['Next-year dividend D1 = current dividend &times; (1 + growth %).', 'Value = D1 &divide; (required return &minus; growth).', 'Growth must be lower than the required return, otherwise the formula has no answer.']);
+  },
+  notes: '<p>Very sensitive to the gap between the required return and growth. Works best for companies with a stable dividend record.</p>'
+});
+reg('val', {
+  id: 'dcf', name: 'DCF Valuation', blurb: 'Two-stage discounted cash flow: growth for some years, then steady terminal growth.',
+  fields: [SYMF, { id: 'fcf', label: 'Current free cash flow (Rs)', value: 800000000, step: 'any' }, { id: 'g1', label: 'Initial growth rate (% a year)', value: 10, step: 'any' }, { id: 'gt', label: 'Terminal growth rate (%)', value: 4, step: 'any', tip: T_TG },
+    { id: 'w', label: 'Discount rate / WACC (%)', value: 12, step: 'any', tip: T_WACC }, { id: 'n', label: 'Projection years', value: 5, step: '1' }, { id: 'nd', label: 'Net debt (Rs)', hint: 'negative if net cash', value: 2000000000, step: 'any' },
+    { id: 'sh', label: 'Shares outstanding', value: 100000000, step: 'any' }, { id: 'price', label: 'Current market price (Rs)', hint: 'optional', value: '', step: '0.01' }],
+  fill: function (r) { return { price: D.g(r, 'LTP') }; },
+  run: function (v) {
+    var r = E.calculateDcf({ fcf: v.fcf, growth_pct: v.g1, terminal_pct: v.gt, discount_pct: v.w, years: v.n, net_debt: v.nd, shares: v.sh, price: v.price });
+    return H('Fair value per share', rs(r.value), r.verdict ? verdictB(r.verdict) : 'Add the current price to compare') + WARN(r.warnings) +
+      S([['Enterprise value', rs(r.enterprise_value)], ['Equity value', rs(r.equity_value)], ['Terminal value', rs(r.terminal_value)], ['PV of terminal value', rs(r.pv_terminal)], ['Terminal value share of total', pct(r.terminal_share_pct, 1)]]) + vsBlock(r) +
+      sec('Projection', T(['Year', 'Free cash flow', 'Present value'], r.rows.map(function (x) { return [x.year, n2(x.fcf), n2(x.pv)]; }))) +
+      FORM(['Free cash flow in year t = current FCF &times; (1 + initial growth)<sup>t</sup>; present value = FCF &divide; (1 + WACC)<sup>t</sup>.', 'Terminal value = last-year FCF &times; (1 + terminal growth) &divide; (WACC &minus; terminal growth), then discounted back.', 'Enterprise value = sum of present values + present value of terminal value. Equity value = enterprise value &minus; net debt. Per share = equity value &divide; shares.', 'Terminal growth must be lower than the discount rate.']);
+  },
+  notes: '<p>The result is very sensitive to growth and the discount rate. When the terminal value is most of the total, the answer depends mainly on assumptions about the far future.</p>'
+});
+reg('val', {
+  id: 'intrinsic', name: 'Intrinsic Value', blurb: 'Choose Graham, DDM or DCF, or blend them. Each method is shown separately.',
+  fields: [SYMF, { id: 'method', kind: 'sel', label: 'Valuation method', value: 'blend', opts: [['graham', 'Graham'], ['ddm', 'Dividend discount model'], ['dcf', 'DCF'], ['blend', 'Blended average of all three']] }, { id: 'price', label: 'Current market price (Rs)', hint: 'optional', value: '', step: '0.01' },
+    { id: 'g_eps', label: 'Graham: EPS (Rs)', value: 35, step: '0.01', tip: T_EPS, showWhen: { id: 'method', 'in': ['graham', 'blend'] } }, { id: 'g_growth', label: 'Graham: growth (% a year)', value: 6, step: 'any', showWhen: { id: 'method', 'in': ['graham', 'blend'] } }, { id: 'g_yield', label: 'Graham: AAA bond yield (%)', value: 9, step: 'any', showWhen: { id: 'method', 'in': ['graham', 'blend'] } },
+    { id: 'd_d0', label: 'DDM: annual dividend per share (Rs)', value: 15, step: '0.01', tip: T_DPS, showWhen: { id: 'method', 'in': ['ddm', 'blend'] } }, { id: 'd_growth', label: 'DDM: dividend growth (%)', value: 4, step: 'any', showWhen: { id: 'method', 'in': ['ddm', 'blend'] } }, { id: 'd_req', label: 'DDM: required return (%)', value: 13, step: 'any', showWhen: { id: 'method', 'in': ['ddm', 'blend'] } },
+    { id: 'c_fcf', label: 'DCF: current free cash flow (Rs)', value: 800000000, step: 'any', showWhen: { id: 'method', 'in': ['dcf', 'blend'] } }, { id: 'c_g1', label: 'DCF: initial growth (%)', value: 10, step: 'any', showWhen: { id: 'method', 'in': ['dcf', 'blend'] } }, { id: 'c_gt', label: 'DCF: terminal growth (%)', value: 4, step: 'any', tip: T_TG, showWhen: { id: 'method', 'in': ['dcf', 'blend'] } },
+    { id: 'c_w', label: 'DCF: discount rate / WACC (%)', value: 12, step: 'any', tip: T_WACC, showWhen: { id: 'method', 'in': ['dcf', 'blend'] } }, { id: 'c_years', label: 'DCF: projection years', value: 5, step: '1', showWhen: { id: 'method', 'in': ['dcf', 'blend'] } },
+    { id: 'c_nd', label: 'DCF: net debt (Rs)', value: 2000000000, step: 'any', showWhen: { id: 'method', 'in': ['dcf', 'blend'] } }, { id: 'c_sh', label: 'DCF: shares outstanding', value: 100000000, step: 'any', showWhen: { id: 'method', 'in': ['dcf', 'blend'] } }],
+  fill: function (r) { return { price: D.g(r, 'LTP'), g_eps: D.g(r, 'EPS (Annu.)') }; },
+  run: function (v) {
+    var r = E.calculateIntrinsicValue({ method: v.method, price: v.price, g_eps: v.g_eps, g_growth: v.g_growth, g_yield: v.g_yield, d_d0: v.d_d0, d_growth: v.d_growth, d_req: v.d_req, c_fcf: v.c_fcf, c_g1: v.c_g1, c_gt: v.c_gt, c_w: v.c_w, c_years: v.c_years, c_nd: v.c_nd, c_sh: v.c_sh });
+    return H(r.is_blend ? 'Blended intrinsic value (average)' : 'Intrinsic value', rs(r.selected), r.verdict ? verdictB(r.verdict) : 'Add the current price to compare') +
+      sec('By method', T(['Method', 'Value per share'], r.methods.map(function (m) { return [m.method, n2(m.value)]; }).concat(r.is_blend ? [['<b>Average</b>', '<b>' + n2(r.average) + '</b>'], ['<b>Median</b>', '<b>' + n2(r.median) + '</b>']] : []))) +
+      (r.skipped.length ? '<p class="cmu">Not included (no data entered): ' + r.skipped.join(', ') + '.</p>' : '') + vsBlock(r) +
+      FORM(['Graham = EPS &times; (8.5 + 2 &times; growth) &times; (4.4 &divide; bond yield). DDM = next dividend &divide; (required return &minus; growth). DCF = two-stage discounted cash flow per share.', 'Blended value = simple average of the methods that have data. The median is shown beside it.', 'Margin of safety = (value &minus; price) &divide; value.']);
+  },
+  notes: '<p>Different methods can give very different answers. A wide spread is a sign that assumptions matter more than the maths.</p>'
+});
+reg('val', {
+  id: 'targetprice', name: 'Target Price', blurb: 'A target price from EPS and a target P/E, or from your own intrinsic value, and the move needed from today.',
+  fields: [SYMF, { id: 'mode', kind: 'sel', label: 'Based on', value: 'pe', opts: [['pe', 'EPS and target P/E'], ['iv', 'My intrinsic value']] }, { id: 'eps', label: 'EPS (Rs)', value: 35, step: '0.01', tip: T_EPS, showWhen: { id: 'mode', 'in': ['pe'] } }, { id: 'pe', label: 'Target P/E', value: 18, step: 'any', showWhen: { id: 'mode', 'in': ['pe'] } },
+    { id: 'iv', label: 'Intrinsic value (Rs)', value: 700, step: '0.01', showWhen: { id: 'mode', 'in': ['iv'] } }, { id: 'price', label: 'Current market price (Rs)', value: 600, step: '0.01' }], fill: loadEps,
+  run: function (v) {
+    var r = E.calculateTargetPrice({ mode: v.mode, eps: v.eps, target_pe: v.pe, intrinsic_value: v.iv, price: v.price });
+    return H('Target price', rs(r.target_price), verdictB(r.verdict)) + S([['Current price', rs(r.price)], ['Upside / downside', spct(r.upside_pct)], ['Price change needed', pnl(r.required_change)]]) +
+      FORM(['Target price = EPS &times; target P/E, or your intrinsic value.', 'Upside = (target &minus; current price) &divide; current price.']);
+  },
+  notes: '<p>A target price is an estimate, not a forecast or a recommendation.</p>'
+});
+reg('val', {
+  id: 'mos', name: 'Margin of Safety', blurb: 'How far the market price sits below your estimate of intrinsic value.',
+  fields: [SYMF, { id: 'iv', label: 'Intrinsic value (Rs)', value: 700, step: '0.01' }, { id: 'price', label: 'Current market price (Rs)', value: 500, step: '0.01', tip: T_MOS }], fill: function (r) { return { price: D.g(r, 'LTP') }; },
+  run: function (v) {
+    var r = E.calculateMarginOfSafety({ intrinsic_value: v.iv, price: v.price });
+    return '<div class="chd"><small>Margin of safety</small><div class="cbig">' + spct(r.margin_of_safety_pct) + '</div><div class="csub">' + verdictB(r.verdict) + '</div></div>' + S([['Intrinsic value', rs(r.intrinsic_value)], ['Market price', rs(r.price)]]) +
+      FORM(['Margin of safety = (intrinsic value &minus; market price) &divide; intrinsic value.', 'Strong: ' + E.RATES.valuation.mos_strong_pct + '% or more. Moderate: ' + E.RATES.valuation.mos_moderate_pct + '% to below ' + E.RATES.valuation.mos_strong_pct + '%. Limited: 0% to below ' + E.RATES.valuation.mos_moderate_pct + '%. Below 0%: trading above estimated value.']);
+  },
+  notes: '<p>The margin of safety is only as reliable as the intrinsic value you enter.</p>'
+});
+reg('val', {
+  id: 'ey', name: 'Earnings Yield', blurb: 'Earnings as a percentage of the price, compared with a risk-free or fixed-deposit rate.',
+  fields: [SYMF, { id: 'eps', label: 'EPS (Rs)', value: 35, step: '0.01', tip: T_EPS }, { id: 'price', label: 'Current market price (Rs)', value: 600, step: '0.01' }, { id: 'rf', label: 'Risk-free or fixed-deposit rate (%)', hint: 'optional', value: 8, step: 'any' }], fill: loadEps,
+  run: function (v) {
+    var r = E.calculateEarningsYield({ eps: v.eps, price: v.price, risk_free_pct: v.rf });
+    return H('Earnings yield', pct(r.earnings_yield_pct, 2), r.difference_pp == null ? 'Enter a risk-free or fixed-deposit rate to compare' : 'Difference from the risk-free rate: ' + spct(r.difference_pp).replace('%', ' pts')) + (r.interpretation ? '<p>' + esc(r.interpretation) + '</p>' : '') +
+      FORM(['Earnings yield = EPS &divide; current price (the inverse of P/E).', 'Difference = earnings yield &minus; risk-free rate, in percentage points.']);
+  },
+  notes: '<p>Earnings can change and are not paid out in full as dividends. This is a quick comparison, not a return you will receive.</p>'
+});
+
+/* ---------- groups, navigation, overview ---------- */
+var GROUPS = [
+  { id: 'trade', name: 'Trading & Costs', blurb: 'Buy, sell, average and margin' },
+  { id: 'corp', name: 'Corporate Actions', blurb: 'Bonus, right and dividend adjustments' },
+  { id: 'tech', name: 'Technical', blurb: 'Support and resistance levels' },
+  { id: 'val', name: 'Investment & Valuation', blurb: 'Intrinsic value, P/E, P/B, DCF and margin of safety' },
+  { id: 'growth', name: 'Growth & Loans', blurb: 'SIP, CAGR and EMI' },
+  { id: 'dates', name: 'Date Converter', blurb: 'BS \u21C4 AD dates and exact age' },
+  { id: 'conv', name: 'Converter Tools', blurb: 'Numbers to words and unit conversion' }
+];
+/* order inside each group (a new calculator without an entry here goes to the end of its group) */
+var ORDER = ['buy', 'sell', 'averaging', 'margin', 'pl', 'breakeven', 'target', 'possize', 'rr', 'bonusshares', 'rightshares', 'combined', 'drip', 'bonus', 'right', 'dividend', 'pivot',
+  'graham', 'pe', 'pb', 'divyield', 'ddm', 'dcf', 'intrinsic', 'targetprice', 'mos', 'ey', 'sip', 'cagr', 'emi', 'date', 'age', 'numwords', 'units'];
+CALCS.sort(function (a, b) { var i = ORDER.indexOf(a.id), j = ORDER.indexOf(b.id); return (i < 0 ? 99 : i) - (j < 0 ? 99 : j); });
+var byId = {}; CALCS.forEach(function (c) { byId[c.id] = c; });
+var cur = null, lastIn = {};   // lastIn: last calculator opened in each group
+
+/* Two-level bar: ALL + the five groups; under it, the calculators of the selected group */
+nav.innerHTML = '<div class="cn-row" id="cn-groups" role="group" aria-label="Calculator groups"><button type="button" data-g="home">ALL</button>' +
+  GROUPS.map(function (g) { return '<button type="button" data-g="' + g.id + '">' + g.name.replace('&', '&amp;').toUpperCase() + '</button>'; }).join('') + '</div>' +
+  '<div class="cn-row cn-sub" id="cn-subs" role="group" aria-label="Calculators in this group" hidden>' +
+  CALCS.map(function (c) { return '<button type="button" data-c="' + c.id + '" data-grp="' + c.group + '" hidden>' + c.name.toUpperCase() + '</button>'; }).join('') + '</div>';
+var subs = nav.querySelector('#cn-subs');
+
+function home() {
+  body.innerHTML = '<div class="chead"><h2>Calculators</h2><p>Practical calculators for Nepal\u2019s capital market and personal finance. Enter your numbers; nothing is stored or sent anywhere.</p></div>' +
+    GROUPS.map(function (g) {
+      return '<h3 class="gh">' + g.name.replace('&', '&amp;') + ' <small>' + g.blurb + '</small></h3><div class="ovg">' + CALCS.filter(function (c) { return c.group === g.id; }).map(function (c) {
+        return '<button type="button" class="ovc" data-c="' + c.id + '"><b>' + c.name + (c.badge ? ' <span class="badge wa">' + c.badge + '</span>' : '') + '</b><span>' + c.blurb + '</span></button>';
+      }).join('') + '</div>';
+    }).join('') + '<p class="cdisc">' + DISC + '</p>';
+}
+function open(id, quiet) {
+  if (id !== 'home' && !byId[id]) id = 'home';
+  cur = id;
+  var grp = id === 'home' ? 'home' : byId[id].group;
+  if (id !== 'home') lastIn[grp] = id;
+  nav.querySelectorAll('#cn-groups button').forEach(function (b) { var on = b.dataset.g === grp; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
+  subs.hidden = grp === 'home';
+  subs.querySelectorAll('button').forEach(function (b) { b.hidden = b.dataset.grp !== grp; b.classList.toggle('on', b.dataset.c === id); });
+  body.innerHTML = '';
+  if (id === 'home') home(); else { var w = document.createElement('div'); w.className = 'cwrap'; body.appendChild(w); byId[id].render(w); }
+  if (!quiet) {
+    try { history.replaceState(null, '', id === 'home' ? '#calc' : '#calc/' + id); } catch (e) { /* ignore */ }
+    window.scrollTo(0, 0);
+  }
+}
+nav.addEventListener('click', function (e) {
+  var b = e.target.closest('button'); if (!b) return;
+  var curGroup = cur === null ? null : (cur === 'home' ? 'home' : byId[cur].group);
+  if (b.dataset.g === curGroup || (b.dataset.c && b.dataset.c === cur)) return;   // already there: keep what the user typed
+  if (b.dataset.g) { if (b.dataset.g === 'home') open('home'); else open(lastIn[b.dataset.g] || CALCS.filter(function (c) { return c.group === b.dataset.g; })[0].id); }
+  else if (b.dataset.c) open(b.dataset.c);
+});
+body.addEventListener('click', function (e) { var b = e.target.closest('.ovc'); if (b) open(b.dataset.c); });
+
+/* ---------- Rates & rules panel: the one place where NEPSE rules are edited (applies until the page is reloaded) ---------- */
+var RT = E.RATES, DEF = E.DEFAULT_RATES, panel = document.createElement('details');
+panel.className = 'cdet rules'; panel.id = 'cn-rules';
+function rf(id, label, val, step) { return '<div class="fld"><label for="rl_' + id + '">' + label + '</label><input id="rl_' + id + '" type="number" inputmode="decimal" step="' + (step || 'any') + '" value="' + val + '"></div>'; }
+function rulesHtml() {
+  var s = RT.brokerage.slabs, rows = s.map(function (x, k) {
+    return '<tr><td>' + (k === s.length - 1 ? 'Above Rs ' + whole(s[k - 1][0]) : (k ? 'Rs ' + whole(s[k - 1][0]) + ' to ' : 'Up to ') + '<input id="rl_lim' + k + '" type="number" step="any" value="' + x[0] + '" aria-label="Upper limit of slab ' + (k + 1) + '">') + '</td><td><input id="rl_rate' + k + '" type="number" step="any" value="' + +(x[1] * 100).toFixed(4) + '" aria-label="Rate of slab ' + (k + 1) + ' in percent"> %</td></tr>';
+  }).join('');
+  return '<summary>Rates &amp; rules (editable)</summary><p class="cmu">NEPSE-style defaults used by the trading calculators. Change them if your broker or the rules differ. Changes apply to all calculators until you reload the page and are not saved or sent anywhere.</p>' +
+    '<div class="ct"><table class="avt"><thead><tr><th>Broker commission: transaction value (Rs)</th><th>Rate</th></tr></thead><tbody>' + rows + '</tbody></table></div><div class="rg">' +
+    rf('min', 'Minimum commission (Rs)', RT.brokerage.minFee) + rf('sebon', 'SEBON fee (% of value)', +(RT.sebon * 100).toFixed(4)) + rf('dp', 'DP charge (Rs, sell side)', RT.dp) +
+    rf('cs', 'CGT: held 365 days or less (%)', +(RT.cgt.individual_short * 100).toFixed(4)) + rf('cl', 'CGT: held more than 365 days (%)', +(RT.cgt.individual_long * 100).toFixed(4)) + rf('ci', 'CGT: institutional (%)', +(RT.cgt.institutional * 100).toFixed(4)) + rf('tds', 'Dividend tax (%)', +(RT.tds * 100).toFixed(4)) +
+    rf('band', 'Fairly valued band (+/- % of price)', RT.valuation.fair_band_pct) + rf('tg', 'Warn if terminal growth above (%)', RT.valuation.terminal_growth_warn_pct) + rf('ms', 'Strong margin of safety from (%)', RT.valuation.mos_strong_pct) + rf('mm', 'Moderate margin of safety from (%)', RT.valuation.mos_moderate_pct) +
+    '</div><div class="cact"><button type="button" class="cbtn primary" data-r="apply">Apply</button><button type="button" class="cbtn" data-r="reset">Reset to defaults</button></div><div class="symmsg" id="rl_msg" role="status"></div>';
+}
+function drawRules() { var o = panel.open; panel.innerHTML = rulesHtml(); panel.open = o; }
+function applyRules() {
+  var q = function (id) { return panel.querySelector('#rl_' + id); }, g = function (id, label, o) { return E.num(q(id).value, label, o); }, msg = panel.querySelector('#rl_msg');
+  try {
+    var n = RT.brokerage.slabs.length, lim = [], rate = [], k;
+    for (k = 0; k < n; k++) { rate.push(g('rate' + k, 'Commission rate ' + (k + 1), { min: 0, max: 5 }) / 100); if (k < n - 1) lim.push(g('lim' + k, 'Slab limit ' + (k + 1), { min: 0, minInclusive: false })); }
+    for (k = 1; k < lim.length; k++) if (lim[k] <= lim[k - 1]) throw new E.CalcError('Slab limits', 'must increase from one slab to the next');
+    var v = { min: g('min', 'Minimum commission', { min: 0 }), sebon: g('sebon', 'SEBON fee', { min: 0, max: 5 }) / 100, dp: g('dp', 'DP charge', { min: 0 }), cs: g('cs', 'CGT up to 365 days', { min: 0, max: 100 }) / 100, cl: g('cl', 'CGT over 365 days', { min: 0, max: 100 }) / 100,
+      ci: g('ci', 'Institutional CGT', { min: 0, max: 100 }) / 100, tds: g('tds', 'Dividend tax', { min: 0, max: 99 }) / 100, band: g('band', 'Fairly valued band', { min: 0, max: 100 }), tg: g('tg', 'Terminal growth warning', { min: 0, max: 20 }), ms: g('ms', 'Strong margin of safety', { min: 0, max: 100 }), mm: g('mm', 'Moderate margin of safety', { min: 0, max: 100 }) };
+    if (v.mm > v.ms) throw new E.CalcError('Margin of safety', 'moderate level must not exceed the strong level');
+    for (k = 0; k < n; k++) { RT.brokerage.slabs[k][1] = rate[k]; if (k < n - 1) RT.brokerage.slabs[k][0] = lim[k]; }
+    RT.brokerage.minFee = v.min; RT.brokerage.minFeeUpTo = RT.brokerage.slabs[0][0]; RT.sebon = v.sebon; RT.dp = v.dp; RT.cgt.individual_short = v.cs; RT.cgt.individual_long = v.cl; RT.cgt.institutional = v.ci; RT.tds = v.tds;
+    RT.valuation.fair_band_pct = v.band; RT.valuation.terminal_growth_warn_pct = v.tg; RT.valuation.mos_strong_pct = v.ms; RT.valuation.mos_moderate_pct = v.mm;
+    if (cur) open(cur, true); drawRules(); panel.querySelector('#rl_msg').textContent = 'Applied. The open calculator was refreshed with the new rules.';
+  } catch (e) { if (e && e.name === 'CalculatorInputError') msg.textContent = 'Please check: ' + e.message; else throw e; }
+}
+function resetRules() {
+  var s = RT.brokerage.slabs; DEF.brokerage.slabs.forEach(function (x, k) { s[k][0] = x[0]; s[k][1] = x[1]; });
+  RT.brokerage.minFee = DEF.brokerage.minFee; RT.brokerage.minFeeUpTo = DEF.brokerage.minFeeUpTo; RT.sebon = DEF.sebon; RT.dp = DEF.dp; RT.tds = DEF.tds;
+  ['individual_short', 'individual_long', 'institutional'].forEach(function (k) { RT.cgt[k] = DEF.cgt[k]; }); Object.keys(DEF.valuation).forEach(function (k) { RT.valuation[k] = DEF.valuation[k]; });
+  if (cur) open(cur, true); drawRules(); panel.querySelector('#rl_msg').textContent = 'Defaults restored.';
+}
+drawRules(); host.insertBefore(panel, body);
+panel.addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; if (b.dataset.r === 'apply') applyRules(); else if (b.dataset.r === 'reset') resetRules(); });
+
+window.NNH_CALC = { show: function () { if (!cur) open('home', true); }, open: open, list: function () { return CALCS.map(function (c) { return c.id; }); } };
+
+var m = /^#calc(?:\/([a-z]+))?$/.exec(location.hash || '');
+if (m) { D.go('calc'); open(m[1] || 'home', true); }
+})();
+
+</script>
+'''
+
+
+# --------------------------------------------------------------------------------------
 # HYDROPOWER tab configuration
 # --------------------------------------------------------------------------------------
 # The Smart Wealth Pro export has NO sector column, so the Stock Screener cannot tell which companies are
@@ -2337,6 +4292,725 @@ def clean_screener(d: dict) -> dict:
     return {"date": d.get("date", ""), "cols": out_cols, "rows": rows}
 
 
+# --------------------------------------------------------------------------------------
+# AI PHOTOSHOP tab (v1.5): fourth main tab, placed right after CALCULATORS.
+# First tool: "Remove Image Background". The browser sends the image to YOUR serverless proxy
+# (Cloudflare Worker, see cloudflare-worker/). The proxy holds the REMOVE_BG_API_KEY secret.
+# The key is NEVER in this file or in the GitHub repository.
+# To change the proxy address, edit PROXY_URL near the top of the script below.
+# --------------------------------------------------------------------------------------
+AI_PHOTOSHOP_BLOCK = r'''<style>
+#aiph{padding:12px 16px 28px;max-width:1200px;margin:0 auto;min-width:0}
+#aiph[hidden]{display:none!important}
+#aiph .chead h2{margin:4px 0 4px;font-size:20px}
+#aiph .chead p{margin:0 0 12px;color:var(--mu);font-size:13px;max-width:80ch}
+#aiph .agrid{display:grid;grid-template-columns:minmax(0,4fr) minmax(0,8fr);gap:14px;align-items:start}
+@media(max-width:820px){#aiph .agrid{grid-template-columns:minmax(0,1fr)}}
+#aiph .cc{background:var(--p);border:1px solid var(--ln);border-radius:8px;padding:14px;min-width:0}
+#aiph h3{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--mu)}
+#aiph .drop{border:2px dashed var(--ln);border-radius:8px;padding:18px 12px;text-align:center;background:var(--ch);transition:border-color .15s ease}
+#aiph .drop.over{border-color:var(--ac)}
+#aiph .drop p{margin:8px 0 0;font-size:12px;color:var(--mu)}
+#aiph .abtn{background:var(--ac);color:var(--onac);border:0;border-radius:6px;padding:8px 16px;min-height:38px;font:inherit;font-weight:700;font-size:13px;cursor:pointer}
+#aiph .abtn:hover:not(:disabled){background:var(--ach)}
+#aiph .abtn.ghost{background:var(--p);color:var(--tx);border:1px solid var(--ln);font-weight:600}
+#aiph .abtn.ghost:hover:not(:disabled){border-color:var(--ac);color:var(--ac);background:var(--p)}
+#aiph .abtn:disabled{opacity:.45;cursor:not-allowed}
+#aiph .abtn:focus-visible,#aiph .drop:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+#aiph .aact{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+#aiph .finfo{margin-top:10px;font-size:12px;color:var(--mu);overflow-wrap:anywhere;min-height:1.2em}
+#aiph .finfo b{color:var(--tx)}
+#aiph .amsg{margin-top:10px;font-size:13px;min-height:1.3em}
+#aiph .amsg.err{background:var(--ch);border:1px solid var(--bad);border-radius:6px;padding:8px 12px;color:var(--bad)}
+#aiph .amsg.ok{color:var(--ok)}
+#aiph .anote{margin-top:14px;border-top:1px solid var(--ln);padding-top:10px;font-size:11.5px;color:var(--mu)}
+#aiph .pv{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media(max-width:560px){#aiph .pv{grid-template-columns:minmax(0,1fr)}}
+#aiph .pane{min-width:0}
+#aiph .pane small{display:block;margin:0 0 6px;color:var(--mu);font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+#aiph .box{position:relative;border:1px solid var(--ln);border-radius:8px;min-height:240px;aspect-ratio:1/1;display:grid;place-items:center;overflow:hidden;background:var(--ch)}
+#aiph .box.chk{background-color:var(--p);background-image:linear-gradient(45deg,var(--ch) 25%,transparent 25%,transparent 75%,var(--ch) 75%),linear-gradient(45deg,var(--ch) 25%,transparent 25%,transparent 75%,var(--ch) 75%);background-size:20px 20px;background-position:0 0,10px 10px}
+#aiph .box img{max-width:100%;max-height:100%;object-fit:contain;display:block}
+#aiph .box .ph{color:var(--mu);font-size:12px;padding:12px;text-align:center}
+#aiph .box[hidden],#aiph .ph[hidden],#aiph img[hidden]{display:none}
+#aiph .busy{position:absolute;inset:0;display:none;flex-direction:column;gap:10px;align-items:center;justify-content:center;background:rgba(0,0,0,.55);color:#fff;font-size:13px;text-align:center;padding:10px}
+#aiph .busy.on{display:flex}
+#aiph .spin{width:34px;height:34px;border:4px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:aiphspin .8s linear infinite}
+@keyframes aiphspin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){#aiph .spin{animation-duration:2.4s}}
+@media(max-width:640px){#aiph{padding:10px 8px 24px}#aiph .abtn{flex:1 1 auto}}
+@media(max-width:480px){.vtabs:not(.sub){overflow-x:auto}}
+/* ===== AI Photoshop: tool switcher + Unblur & Enhance Photo ===== */
+#aiph .aitools{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px}
+#aiph .aitool{background:var(--p);color:var(--tx);border:1px solid var(--ln);border-radius:16px;padding:6px 16px;min-height:36px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+#aiph .aitool:hover{border-color:var(--ac);color:var(--ac)}
+#aiph .aitool.on{background:var(--ac);color:var(--onac);border-color:transparent}
+#aiph .aitool:focus-visible,#aiph .chip:focus-visible,#aiph .segb:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+#aiph .engrid{display:grid;grid-template-columns:minmax(0,4fr) minmax(0,8fr);grid-template-rows:auto 1fr;grid-template-areas:"up cmp" "ctl cmp";gap:14px;align-items:start}
+#aiph .en-up{grid-area:up}#aiph .en-ctl{grid-area:ctl}
+#aiph .en-cmp{grid-area:cmp;position:sticky;top:84px}
+@media(max-width:820px){#aiph .engrid{grid-template-columns:minmax(0,1fr);grid-template-rows:none;grid-template-areas:"up" "cmp" "ctl"}#aiph .en-cmp{position:static}}
+#aiph .chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px}
+#aiph .chip{background:var(--p);color:var(--tx);border:1px solid var(--ln);border-radius:16px;padding:5px 12px;min-height:34px;font:inherit;font-size:12px;cursor:pointer}
+#aiph .chip:hover{border-color:var(--ac);color:var(--ac)}
+#aiph .chip.on{background:var(--ac);color:var(--onac);border-color:transparent}
+#aiph .srow{display:grid;grid-template-columns:1fr auto;gap:2px 8px;margin:0 0 8px}
+#aiph .srow label{font-size:12px;font-weight:600}
+#aiph .srow output{font-size:12px;color:var(--mu);font-variant-numeric:tabular-nums}
+#aiph .srow input[type=range]{grid-column:1/-1;width:100%;accent-color:var(--ac);margin:2px 0 0;min-height:26px}
+#aiph .srow input[type=range]:disabled{opacity:.5}
+#aiph .seg2{display:flex;border:1px solid var(--ln);border-radius:6px;overflow:hidden;margin:0 0 12px;width:max-content;max-width:100%}
+#aiph .segb{background:var(--p);color:var(--tx);border:0;border-right:1px solid var(--ln);padding:6px 14px;min-height:34px;font:inherit;font-size:12px;font-weight:600;cursor:pointer}
+#aiph .segb:last-child{border-right:0}
+#aiph .segb.on{background:var(--ac);color:var(--onac)}
+#aiph .fsel{width:100%;background:var(--p);color:var(--tx);border:1px solid var(--ln);border-radius:6px;padding:6px 10px;min-height:38px;font:inherit;margin:0 0 10px}
+#aiph .cmpwrap{display:flex;justify-content:center}
+#aiph .cmpbox{position:relative;width:100%;aspect-ratio:4/3;border:1px solid var(--ln);border-radius:8px;overflow:hidden;background:var(--ch);touch-action:pan-y;user-select:none;-webkit-user-select:none;cursor:ew-resize}
+#aiph .cmpbox canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#aiph .cmpbox canvas[hidden]{display:none}
+#aiph .cmpbox canvas.after{clip-path:inset(0 0 0 50%)}
+#aiph .enph{position:absolute;inset:0;display:grid;place-items:center;color:var(--mu);font-size:12px;padding:12px;text-align:center;cursor:default}
+#aiph .enph[hidden]{display:none}
+#aiph .cmpline{position:absolute;top:0;bottom:0;left:50%;width:2px;margin-left:-1px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.4);pointer-events:none}
+#aiph .cmpknob{position:absolute;top:50%;left:50%;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;background:#fff;color:#222;display:grid;place-items:center;font-size:15px;box-shadow:0 1px 6px rgba(0,0,0,.5)}
+#aiph .cmptag{position:absolute;top:8px;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;background:rgba(0,0,0,.62);color:#fff;padding:2px 9px;border-radius:10px;pointer-events:none}
+#aiph .cmptag.l{left:8px}#aiph .cmptag.r{right:8px}
+#aiph .cmpbox[data-empty="1"] .cmpline,#aiph .cmpbox[data-empty="1"] .cmptag{display:none}
+#aiph #enPos{width:100%;accent-color:var(--ac);margin:10px 0 0;min-height:26px}
+#aiph .encap{margin-top:8px;font-size:12px;color:var(--mu);overflow-wrap:anywhere}
+</style>
+<section id="aiph" hidden aria-label="AI Photoshop">
+ <div class="aitools" role="group" aria-label="AI Photoshop tools">
+  <button type="button" class="aitool on" data-ait="bg" aria-pressed="true">Remove Background</button>
+  <button type="button" class="aitool" data-ait="en" aria-pressed="false">Unblur &amp; Enhance</button>
+ </div>
+<div id="aiToolBg">
+ <div class="chead"><h2>Remove Image Background</h2>
+  <p>Upload a JPG, PNG or WebP photo and get back a transparent PNG with the background removed.</p></div>
+ <div class="agrid">
+  <div class="cc">
+   <h3>1. Choose image</h3>
+   <div class="drop" id="aiDrop" tabindex="0" role="button" aria-label="Choose an image or drop it here">
+    <button type="button" class="abtn" id="aiPick">Choose Image</button>
+    <p>or drag and drop it here<br>JPG, PNG or WebP, up to 10 MB</p>
+    <input type="file" id="aiFile" accept="image/jpeg,image/png,image/webp" hidden>
+   </div>
+   <div class="finfo" id="aiInfo"></div>
+   <h3 style="margin-top:14px">2. Remove background</h3>
+   <div class="aact">
+    <button type="button" class="abtn" id="aiGo">Remove Background</button>
+    <button type="button" class="abtn ghost" id="aiReset">Reset</button>
+   </div>
+   <div class="amsg" id="aiMsg" role="status" aria-live="polite"></div>
+   <div class="anote">Your image is sent to an online background-removal service to be processed. Do not upload confidential client or company images.</div>
+  </div>
+  <div class="cc">
+   <h3>3. Before and after</h3>
+   <div class="pv">
+    <div class="pane"><small>Before</small>
+     <div class="box" id="aiBeforeBox"><span class="ph" id="aiBeforePh">Your image will appear here</span><img id="aiBefore" alt="Original image preview" hidden></div></div>
+    <div class="pane"><small>After (transparent PNG)</small>
+     <div class="box chk" id="aiAfterBox"><span class="ph" id="aiAfterPh">The result will appear here</span><img id="aiAfter" alt="Image with background removed" hidden>
+      <div class="busy" id="aiBusy" role="alert"><div class="spin" aria-hidden="true"></div><span>Removing background...<br>this can take a few seconds</span></div></div></div>
+   </div>
+   <div class="aact"><button type="button" class="abtn" id="aiDl" disabled>Download PNG</button></div>
+  </div>
+ </div>
+</div>
+<div id="aiToolEn" hidden>
+ <div class="chead"><h2>Unblur &amp; Enhance Photo</h2>
+  <p>Sharpen soft photos and improve brightness, contrast and colour. Everything happens inside your browser: your photo is never uploaded and no online service is used.</p></div>
+ <div class="engrid">
+  <div class="cc en-up">
+   <h3>1. Choose photo</h3>
+   <div class="drop" id="enDrop" tabindex="0" role="button" aria-label="Choose a photo or drop it here">
+    <button type="button" class="abtn" id="enPick">Choose Photo</button>
+    <p>or drag and drop it here<br>JPG, PNG or WebP, up to 15 MB</p>
+    <input type="file" id="enFile" accept="image/jpeg,image/png,image/webp" hidden>
+   </div>
+   <div class="finfo" id="enInfo"></div>
+   <div class="amsg" id="enMsg" role="status" aria-live="polite"></div>
+  </div>
+
+  <div class="cc en-cmp">
+   <h3>Before / After</h3>
+   <div class="seg2" role="group" aria-label="Comparison view">
+    <button type="button" class="segb on" data-view="split" aria-pressed="true">Split</button>
+    <button type="button" class="segb" data-view="before" aria-pressed="false">Original</button>
+    <button type="button" class="segb" data-view="after" aria-pressed="false">Enhanced</button>
+   </div>
+   <div class="cmpwrap">
+    <div class="cmpbox" id="enBox" data-empty="1">
+     <span class="enph" id="enPh">Your photo will appear here</span>
+     <canvas id="enBefore" hidden aria-label="Original photo"></canvas>
+     <canvas id="enAfter" class="after" hidden aria-label="Enhanced photo"></canvas>
+     <span class="cmptag l">Original</span><span class="cmptag r">Enhanced</span>
+     <div class="cmpline" id="enLine"><div class="cmpknob" aria-hidden="true">&#8646;</div></div>
+     <div class="busy" id="enBusy" role="alert"><div class="spin" aria-hidden="true"></div><span id="enBusyTxt">Processing...</span></div>
+    </div>
+   </div>
+   <input type="range" id="enPos" min="0" max="100" value="50" aria-label="Before and after comparison position">
+   <div class="encap" id="enCap">Drag the line on the photo, or use the slider, to compare. The preview is shown at reduced size; the download uses your full-size photo.</div>
+  </div>
+
+  <div class="cc en-ctl">
+   <h3>2. Presets</h3>
+   <div class="chips" role="group" aria-label="Presets">
+    <button type="button" class="chip" data-preset="auto">Auto Enhance</button>
+    <button type="button" class="chip" data-preset="unblur">Unblur</button>
+    <button type="button" class="chip" data-preset="portrait">Portrait</button>
+    <button type="button" class="chip" data-preset="product">Product Photo</button>
+    <button type="button" class="chip" data-preset="reset">Reset</button>
+   </div>
+   <h3>3. Fine tune</h3>
+   <div class="srow"><label for="enSharp">Sharpness</label><output id="enSharpV" for="enSharp">0</output><input type="range" id="enSharp" min="0" max="100" value="0" disabled></div>
+   <div class="srow"><label for="enLocal">Local contrast (clarity)</label><output id="enLocalV" for="enLocal">0</output><input type="range" id="enLocal" min="0" max="100" value="0" disabled></div>
+   <div class="srow"><label for="enBright">Brightness</label><output id="enBrightV" for="enBright">0</output><input type="range" id="enBright" min="-100" max="100" value="0" disabled></div>
+   <div class="srow"><label for="enContrast">Contrast</label><output id="enContrastV" for="enContrast">0</output><input type="range" id="enContrast" min="-100" max="100" value="0" disabled></div>
+   <div class="srow"><label for="enSat">Saturation</label><output id="enSatV" for="enSat">0</output><input type="range" id="enSat" min="-100" max="100" value="0" disabled></div>
+   <div class="srow"><label for="enDenoise">Denoise / smoothing</label><output id="enDenoiseV" for="enDenoise">0</output><input type="range" id="enDenoise" min="0" max="100" value="0" disabled></div>
+   <h3 style="margin-top:14px">4. Size and download</h3>
+   <div class="seg2" role="group" aria-label="Image scale">
+    <button type="button" class="segb on" data-scale="1" aria-pressed="true">Original</button>
+    <button type="button" class="segb" data-scale="1.5" aria-pressed="false">1.5x</button>
+    <button type="button" class="segb" data-scale="2" aria-pressed="false">2x</button>
+   </div>
+   <select id="enFmt" class="fsel" aria-label="Download format">
+    <option value="png">PNG (best quality)</option>
+    <option value="jpg">JPG (smaller file)</option>
+   </select>
+   <div class="aact"><button type="button" class="abtn" id="enDl">Download Enhanced Image</button></div>
+   <div class="encap" id="enSize"></div>
+   <div class="anote">Private: this tool runs entirely in your browser. Nothing is uploaded or stored.</div>
+  </div>
+ </div>
+</div>
+</section>
+<script>
+(function () {
+'use strict';
+/* ====== SETTINGS: the only place you may need to edit ====== */
+// Address of YOUR Cloudflare Worker (see cloudflare-worker/README). Replace YOUR-SUBDOMAIN after deploying it.
+var PROXY_URL = 'https://removebg-proxy.YOUR-SUBDOMAIN.workers.dev/api/remove-background';
+var MAX_BYTES = 10 * 1024 * 1024;                      // 10 MB (remove.bg itself allows 22 MB)
+var TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+var TIMEOUT_MS = 60000;
+/* =========================================================== */
+
+var $ = function (id) { return document.getElementById(id); };
+var file = null, beforeUrl = null, afterUrl = null, busy = false;
+var el = {
+  drop: $('aiDrop'), pick: $('aiPick'), input: $('aiFile'), info: $('aiInfo'), go: $('aiGo'), reset: $('aiReset'),
+  msg: $('aiMsg'), before: $('aiBefore'), beforePh: $('aiBeforePh'), after: $('aiAfter'), afterPh: $('aiAfterPh'),
+  busy: $('aiBusy'), dl: $('aiDl')
+};
+if (!el.drop) return;
+
+function say(text, kind) { el.msg.textContent = text || ''; el.msg.className = 'amsg' + (kind ? ' ' + kind : ''); }
+function sizeText(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'; }
+function revoke(u) { if (u) { try { URL.revokeObjectURL(u); } catch (e) { } } }
+
+function clearAfter() {
+  revoke(afterUrl); afterUrl = null;
+  el.after.removeAttribute('src'); el.after.hidden = true; el.afterPh.hidden = false; el.dl.disabled = true;
+}
+function setBusy(on) {
+  busy = on; el.busy.classList.toggle('on', on);
+  el.go.disabled = on; el.reset.disabled = on; el.pick.disabled = on;
+}
+
+/* ---- validation (messages are shown to the user) ---- */
+function problem(f) {
+  if (!f) return 'No file selected. Please choose an image first.';
+  if (TYPES.indexOf(f.type) < 0) return 'Unsupported file type. Please use a JPG, PNG or WebP image.';
+  if (f.size > MAX_BYTES) return 'File too large (' + sizeText(f.size) + '). The maximum size is ' + sizeText(MAX_BYTES) + '.';
+  if (f.size === 0) return 'This file is empty. Please choose another image.';
+  return '';
+}
+
+function choose(f) {
+  clearAfter(); say('');
+  var p = problem(f);
+  if (p) {
+    file = null; revoke(beforeUrl); beforeUrl = null;
+    el.before.removeAttribute('src'); el.before.hidden = true; el.beforePh.hidden = false;
+    el.info.textContent = ''; say(p, 'err'); return;
+  }
+  file = f; revoke(beforeUrl); beforeUrl = URL.createObjectURL(f);
+  el.before.src = beforeUrl; el.before.hidden = false; el.beforePh.hidden = true;
+  el.info.innerHTML = '';
+  var b = document.createElement('b'); b.textContent = f.name;
+  el.info.appendChild(b); el.info.appendChild(document.createTextNode(' (' + sizeText(f.size) + ')'));
+}
+
+function fail(status, serverMsg) {
+  var m;
+  if (status === 400) m = 'The service could not process this image. Try a different photo.' + (serverMsg ? ' (' + serverMsg + ')' : '');
+  else if (status === 402) m = 'The background-removal service has run out of credits. Please try again later.';
+  else if (status === 403) m = 'This website is not allowed to use the service, or the service key is invalid.';
+  else if (status === 413) m = 'File too large for the service. Please use a smaller image.';
+  else if (status === 415) m = 'Unsupported file type. Please use a JPG, PNG or WebP image.';
+  else if (status === 429) m = 'Too many requests. Please wait a minute and try again.';
+  else if (status >= 500) m = 'The background-removal service is having problems. Please try again later.';
+  else m = 'Something went wrong (error ' + status + ').' + (serverMsg ? ' ' + serverMsg : '');
+  say(m, 'err');
+}
+
+async function run() {
+  if (busy) return;
+  var p = problem(file);
+  if (p) { say(p, 'err'); return; }
+  if (PROXY_URL.indexOf('YOUR-SUBDOMAIN') >= 0) {
+    say('Background removal is not available yet. You can try Unblur & Enhance, or check back soon.', 'err'); return;   /* owner: set PROXY_URL above to your deployed Worker address to switch this tool on */
+  }
+  clearAfter(); say(''); setBusy(true);
+  var ctl = new AbortController(), timer = setTimeout(function () { ctl.abort(); }, TIMEOUT_MS);
+  try {
+    var fd = new FormData();
+    fd.append('image_file', file, file.name);
+    var res = await fetch(PROXY_URL, { method: 'POST', body: fd, signal: ctl.signal });
+    if (!res.ok) {
+      var detail = '';
+      try { var j = await res.json(); detail = (j && (j.error || j.message)) || ''; } catch (e) { }
+      fail(res.status, detail); return;
+    }
+    var blob = await res.blob();
+    if (!blob || blob.size === 0 || blob.type.indexOf('image/') !== 0) { say('The service returned an unexpected response. Please try again.', 'err'); return; }
+    afterUrl = URL.createObjectURL(blob);
+    el.after.src = afterUrl; el.after.hidden = false; el.afterPh.hidden = true; el.dl.disabled = false;
+    say('Done. Check the result, then click Download PNG.', 'ok');
+  } catch (e) {
+    if (e && e.name === 'AbortError') say('The request took too long and was stopped. Please try again.', 'err');
+    else say('Network error. Please check your internet connection and try again.', 'err');
+  } finally {
+    clearTimeout(timer); setBusy(false);
+  }
+}
+
+function download() {
+  if (!afterUrl) return;
+  var base = (file && file.name ? file.name.replace(/\.[^.]+$/, '') : 'image').replace(/[^\w\-]+/g, '_') || 'image';
+  var a = document.createElement('a'); a.href = afterUrl; a.download = base + '-no-bg.png';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+function reset() {
+  file = null; revoke(beforeUrl); beforeUrl = null; clearAfter(); el.input.value = '';
+  el.before.removeAttribute('src'); el.before.hidden = true; el.beforePh.hidden = false; el.info.textContent = ''; say('');
+}
+
+el.pick.addEventListener('click', function (e) { e.stopPropagation(); el.input.click(); });
+el.drop.addEventListener('click', function () { if (!busy) el.input.click(); });
+el.drop.addEventListener('keydown', function (e) { if ((e.key === 'Enter' || e.key === ' ') && e.target === el.drop) { e.preventDefault(); if (!busy) el.input.click(); } });
+el.input.addEventListener('change', function () { choose(el.input.files && el.input.files[0]); });
+['dragenter', 'dragover'].forEach(function (n) { el.drop.addEventListener(n, function (e) { e.preventDefault(); el.drop.classList.add('over'); }); });
+['dragleave', 'drop'].forEach(function (n) { el.drop.addEventListener(n, function (e) { e.preventDefault(); el.drop.classList.remove('over'); }); });
+el.drop.addEventListener('drop', function (e) { if (!busy && e.dataTransfer && e.dataTransfer.files.length) choose(e.dataTransfer.files[0]); });
+el.go.addEventListener('click', run);
+el.reset.addEventListener('click', reset);
+el.dl.addEventListener('click', download);
+})();
+</script>
+<script>
+(function () {
+'use strict';
+/* =========================================================================
+   UNBLUR & ENHANCE PHOTO  -  runs 100% in the browser (HTML Canvas).
+   No upload, no API key, no server.
+
+   Map of this file (for beginners):
+     1. SETTINGS  - limits and preset values you can safely edit
+     2. ENGINE    - the image filters: blur, denoise, tone, sharpen
+     3. SCREEN    - buttons, sliders, preview, before/after, download
+   ========================================================================= */
+
+/* ---------------- 1. SETTINGS ---------------- */
+var MAX_BYTES = 15 * 1024 * 1024;            // biggest file accepted (15 MB)
+var TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+var PREVIEW_LONG = 1280;                     // preview size in pixels (smaller = faster sliders)
+var MAX_LONG_SIDE = 6000;                    // very large photos are reduced to this (longest side)
+var MAX_OUTPUT_PIXELS = 16000000;            // output limit: phones cannot make bigger canvases
+var MAX_SOURCE_PIXELS = 100000000;           // refuse absurd sizes that would crash the browser
+var JPG_QUALITY = 0.95;                      // JPG download quality (0 to 1)
+var LIVE_DELAY = 150;                        // wait (ms) after a slider moves before re-processing
+
+// Slider values (all start at 0). Meaning of each:
+//   sharp    0-100   edge sharpening (the "unblur" strength)
+//   local    0-100   local contrast / clarity (makes detail pop)
+//   bright  -100-100 brighter or darker
+//   contrast-100-100 more or less contrast
+//   sat     -100-100 colour strength
+//   denoise  0-100   smoothing of grain and noise (keeps strong edges)
+var DEFAULTS = { sharp: 0, local: 0, bright: 0, contrast: 0, sat: 0, denoise: 0 };
+
+// Presets. Edit the numbers to change how each button behaves.
+// ("Auto Enhance" is calculated from your photo, see autoSettings() below.)
+var PRESETS = {
+  unblur:   { sharp: 70, local: 30, bright: 0, contrast: 6,  sat: 4,  denoise: 25 },
+  portrait: { sharp: 25, local: 10, bright: 6, contrast: 4,  sat: 4,  denoise: 35 },
+  product:  { sharp: 50, local: 35, bright: 8, contrast: 14, sat: 15, denoise: 15 }
+};
+
+/* ---------------- 2. ENGINE ---------------- */
+
+// Fast box blur of ONE channel (an array of 0-255 numbers, one per pixel).
+// Used by denoise, local contrast and sharpening.
+function blurH(src, dst, w, h, r) {            // horizontal pass
+  var div = 2 * r + 1, half = div >> 1;
+  for (var y = 0; y < h; y++) {
+    var o = y * w, sum = src[o] * (r + 1);
+    for (var i = 1; i <= r; i++) sum += src[o + Math.min(i, w - 1)];
+    for (var x = 0; x < w; x++) {
+      dst[o + x] = (sum + half) / div | 0;
+      sum += src[o + Math.min(x + r + 1, w - 1)] - src[o + Math.max(x - r, 0)];
+    }
+  }
+}
+function blurV(src, dst, w, h, r) {            // vertical pass
+  var div = 2 * r + 1, half = div >> 1, sums = new Int32Array(w), x, y, i, row;
+  for (x = 0; x < w; x++) sums[x] = src[x] * (r + 1);
+  for (i = 1; i <= r; i++) { row = Math.min(i, h - 1) * w; for (x = 0; x < w; x++) sums[x] += src[row + x]; }
+  for (y = 0; y < h; y++) {
+    var o = y * w, add = Math.min(y + r + 1, h - 1) * w, sub = Math.max(y - r, 0) * w;
+    for (x = 0; x < w; x++) { dst[o + x] = (sums[x] + half) / div | 0; sums[x] += src[add + x] - src[sub + x]; }
+  }
+}
+function blur(plane, w, h, r, passes) {       // 2 passes give a smooth, Gaussian-like blur
+  var tmp = new Uint8ClampedArray(plane.length), out = new Uint8ClampedArray(plane.length), cur = plane;
+  for (var p = 0; p < passes; p++) { blurH(cur, tmp, w, h, r); blurV(tmp, out, w, h, r); cur = out; }
+  return out;
+}
+
+// Step A: denoise. Blends each pixel toward its blurred version, but only where the
+// difference is small (noise). Strong edges are left alone so they stay sharp.
+function denoise(d, w, h, amt, r) {
+  var n = w * h, plane = new Uint8ClampedArray(n), thr = 20 + 20 * amt, i;
+  for (var c = 0; c < 3; c++) {
+    for (i = 0; i < n; i++) plane[i] = d[i * 4 + c];
+    var bl = blur(plane, w, h, r, 2);
+    for (i = 0; i < n; i++) {
+      var diff = bl[i] - plane[i], ad = diff < 0 ? -diff : diff, keep = 1 - ad / thr;
+      if (keep > 0) d[i * 4 + c] = plane[i] + diff * amt * keep;
+    }
+  }
+}
+
+// Step B: brightness, contrast, saturation.
+// Built with curves that keep pure black and pure white fixed, so dark and bright
+// areas are not crushed or blown out (this is what keeps the result natural).
+//   brightness : gamma curve        (lifts or lowers the midtones)
+//   contrast   : smooth S-curve     (more contrast in the middle, gentle at the ends)
+//   saturation : stops at the colour limit so colours never clip or shift hue
+function toneCurve(p) {
+  var lut = new Float32Array(256), gam = Math.pow(2, -p.bright / 80), c = p.contrast / 100, i, x, y;
+  for (i = 0; i < 256; i++) {
+    x = Math.pow(i / 255, gam);                                           // brightness
+    if (c > 0) {
+      var t = Math.min(2, c * 1.8), k1 = Math.min(1, t);
+      y = x + k1 * (x * x * (3 - 2 * x) - x);                             // S-curve
+      if (t > 1) y = y + (t - 1) * (y * y * (3 - 2 * y) - y);             // stronger S-curve for high values
+      x = y;
+    } else if (c < 0) x = 0.5 + (x - 0.5) * (1 + c);                      // flatten
+    lut[i] = x * 255;
+  }
+  return lut;
+}
+function tone(d, n, p) {
+  var lut = toneCurve(p), s = 1 + p.sat / 100;
+  for (var i = 0, j = 0; i < n; i++, j += 4) {
+    var r = lut[d[j]], g = lut[d[j + 1]], b = lut[d[j + 2]];
+    if (s !== 1) {
+      var gray = 0.299 * r + 0.587 * g + 0.114 * b, m = s, dr = r - gray, dg = g - gray, db = b - gray, q;
+      if (s > 1) {                                                        // limit so no channel goes past 0 or 255
+        if (dr > 0) { q = (255 - gray) / dr; if (q < m) m = q; } else if (dr < 0) { q = gray / -dr; if (q < m) m = q; }
+        if (dg > 0) { q = (255 - gray) / dg; if (q < m) m = q; } else if (dg < 0) { q = gray / -dg; if (q < m) m = q; }
+        if (db > 0) { q = (255 - gray) / db; if (q < m) m = q; } else if (db < 0) { q = gray / -db; if (q < m) m = q; }
+        if (m < 1) m = 1;
+      }
+      r = gray + dr * m; g = gray + dg * m; b = gray + db * m;
+    }
+    d[j] = r; d[j + 1] = g; d[j + 2] = b;
+  }
+}
+
+// Step C: local contrast + sharpening. Works on brightness (luminance) only, so
+// colours do not shift. Three pieces:
+//   1) local contrast : big-radius "unsharp mask" (pixel minus its wide blur)
+//   2) unsharp mask   : small-radius sharpening of edges
+//   3) 3x3 sharpen convolution kernel  [ 0 -a 0 / -a 1+4a -a / 0 -a 0 ]  for fine edges
+// Noise guard: tiny differences are boosted less. Halo guard: change is capped (LIMIT).
+function detail(d, w, h, p, S, dil) {
+  var n = w * h, Y = new Uint8ClampedArray(n), i, j;
+  for (i = 0, j = 0; i < n; i++, j += 4) Y[i] = 0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2];
+  var lAmt = p.local / 100 * 0.8, uAmt = p.sharp / 100 * 1.1, kAmt = p.sharp / 100 * 0.18, LIMIT = 48;
+  var BL = lAmt > 0 ? blur(Y, w, h, Math.max(6, Math.round(Math.max(w, h) * 0.02)), 2) : null;
+  var BS = uAmt > 0 ? blur(Y, w, h, Math.max(1, Math.round(2 * S)), 2) : null;
+  for (var y = 0; y < h; y++) {
+    var row = y * w, up = (y >= dil ? y - dil : 0) * w, dn = (y + dil < h ? y + dil : h - 1) * w;
+    for (var x = 0; x < w; x++) {
+      var k = row + x, v = Y[k], delta = 0;
+      if (BL) { var tt = v / 255; delta += lAmt * (v - BL[k]) * (0.25 + 3 * tt * (1 - tt)); }   // weaker in very dark / very bright areas
+      if (BS) {
+        var t = v - BS[k], a = t < 0 ? -t : t;
+        delta += uAmt * t * (a >= 6 ? 1 : a / 6);
+        var xl = x >= dil ? x - dil : 0, xr = x + dil < w ? x + dil : w - 1;
+        var lap = 4 * v - Y[row + xl] - Y[row + xr] - Y[up + x] - Y[dn + x], la = lap < 0 ? -lap : lap;
+        delta += kAmt * lap * (la >= 12 ? 1 : la / 12);
+      }
+      if (delta > LIMIT) delta = LIMIT; else if (delta < -LIMIT) delta = -LIMIT;
+      j = k * 4; d[j] += delta; d[j + 1] += delta; d[j + 2] += delta;
+    }
+  }
+}
+
+function isIdentity(p) { return !(p.sharp || p.local || p.bright || p.contrast || p.sat || p.denoise); }
+
+// Runs all steps on an ImageData (changes it in place). Filter sizes grow with the
+// picture size, so the small preview and the big download look the same.
+function enhance(img, p) {
+  if (isIdentity(p)) return;
+  var w = img.width, h = img.height, d = img.data, S = Math.max(w, h) / PREVIEW_LONG;
+  if (p.denoise > 0) denoise(d, w, h, p.denoise / 100, Math.max(1, Math.round(1.5 * S)));
+  if (p.bright || p.contrast || p.sat) tone(d, w * h, p);
+  if (p.local > 0 || p.sharp > 0) detail(d, w, h, p, S, Math.max(1, Math.round(S)));
+}
+
+// "Auto Enhance": looks at the photo's brightness and contrast and picks slider values.
+function autoSettings(data) {
+  var d = data, n = d.length / 4, hist = new Uint32Array(256), sum = 0, i, y;
+  for (i = 0; i < d.length; i += 4) { y = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) | 0; hist[y]++; sum += y; }
+  var mean = sum / n, acc = 0, lo = 0, hi = 255;
+  for (i = 0; i < 256; i++) { acc += hist[i]; if (acc >= n * 0.01) { lo = i; break; } }
+  acc = 0;
+  for (i = 255; i >= 0; i--) { acc += hist[i]; if (acc >= n * 0.01) { hi = i; break; } }
+  var spread = Math.max(hi - lo, 60);
+  var contrast = spread < 215 ? Math.min(35, Math.round((235 / spread - 1) * 60)) : 0;
+  var bright = Math.max(-30, Math.min(30, Math.round(118 - mean)));
+  return { sharp: 45, local: 25, bright: bright, contrast: contrast, sat: 10, denoise: 12 };
+}
+
+/* ---------------- 3. SCREEN ---------------- */
+var $ = function (id) { return document.getElementById(id); };
+var KEYS = ['sharp', 'local', 'bright', 'contrast', 'sat', 'denoise'];
+var IDS = { sharp: 'enSharp', local: 'enLocal', bright: 'enBright', contrast: 'enContrast', sat: 'enSat', denoise: 'enDenoise' };
+var el = {
+  drop: $('enDrop'), pick: $('enPick'), file: $('enFile'), info: $('enInfo'), msg: $('enMsg'),
+  box: $('enBox'), ph: $('enPh'), before: $('enBefore'), after: $('enAfter'), line: $('enLine'), pos: $('enPos'),
+  busy: $('enBusy'), busyTxt: $('enBusyTxt'), dl: $('enDl'), fmt: $('enFmt'), size: $('enSize')
+};
+if (!el.drop) return;
+var bctx = el.before.getContext('2d', { willReadFrequently: true });
+var actx = el.after.getContext('2d', { willReadFrequently: true });
+
+var work = null;            // the photo (canvas), reduced only if it is huge
+var baseData = null;        // original preview pixels (ImageData)
+var fileName = 'photo';
+var ready = false, scale = 1, pos = 50;
+var working = false, dirty = false, liveTimer = null, busyTimer = null;
+
+function say(text, kind) { el.msg.textContent = text || ''; el.msg.className = 'amsg' + (kind ? ' ' + kind : ''); }
+function sizeText(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'; }
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+
+function busyOn(text, now) {
+  clearTimeout(busyTimer); el.busyTxt.textContent = text || 'Processing...';
+  if (now) el.busy.classList.add('on'); else busyTimer = setTimeout(function () { el.busy.classList.add('on'); }, 150);
+}
+function busyOff() { clearTimeout(busyTimer); el.busy.classList.remove('on'); }
+
+/* --- check the chosen file --- */
+function problem(f) {
+  if (!f) return 'No image selected. Please choose a photo first.';
+  var okType = TYPES.indexOf(f.type) >= 0 || (!f.type && /\.(jpe?g|png|webp)$/i.test(f.name));
+  if (!okType) return 'Unsupported file type. Please use a JPG, PNG or WebP image.';
+  if (f.size === 0) return 'This file is empty. Please choose another photo.';
+  if (f.size > MAX_BYTES) return 'File too large (' + sizeText(f.size) + '). The maximum size is ' + sizeText(MAX_BYTES) + '.';
+  return '';
+}
+
+/* --- read the photo and prepare the preview --- */
+function loadFile(f) {
+  say('');
+  var p = problem(f);
+  if (p) { say(p, 'err'); return; }
+  var url = URL.createObjectURL(f), img = new Image();
+  img.onload = function () {
+    URL.revokeObjectURL(url);
+    try { start(img, f); } catch (e) { console.error(e); say('Image processing failed. The photo may be too large for this browser. Try a smaller photo.', 'err'); }
+  };
+  img.onerror = function () { URL.revokeObjectURL(url); say('This image could not be read. The file may be damaged. Please try another photo.', 'err'); };
+  img.src = url;
+}
+
+function start(img, f) {
+  var nw = img.naturalWidth, nh = img.naturalHeight;
+  if (!nw || !nh) { say('This image could not be read. Please try another photo.', 'err'); return; }
+  if (nw * nh > MAX_SOURCE_PIXELS) { say('The picture is too large (' + nw + ' x ' + nh + ' pixels). Please use a smaller photo.', 'err'); return; }
+  var k = Math.min(1, MAX_LONG_SIDE / Math.max(nw, nh), Math.sqrt(MAX_OUTPUT_PIXELS / (nw * nh)));
+  var ww = Math.max(1, Math.round(nw * k)), wh = Math.max(1, Math.round(nh * k));
+  var c = document.createElement('canvas'); c.width = ww; c.height = wh;
+  var cx = c.getContext('2d'); cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
+  cx.drawImage(img, 0, 0, ww, wh);
+  var pk = Math.min(1, PREVIEW_LONG / Math.max(ww, wh)), pw = Math.max(1, Math.round(ww * pk)), ph = Math.max(1, Math.round(wh * pk));
+  el.before.width = el.after.width = pw; el.before.height = el.after.height = ph;
+  bctx.imageSmoothingQuality = 'high'; bctx.drawImage(c, 0, 0, pw, ph);
+  baseData = bctx.getImageData(0, 0, pw, ph);
+  actx.putImageData(baseData, 0, 0);
+  work = c; fileName = f.name.replace(/\.[^.]+$/, '').replace(/[^\w\-]+/g, '_') || 'photo'; ready = true;
+
+  var ratio = pw / ph;                                   // fit the comparison box to the photo
+  el.box.style.aspectRatio = pw + ' / ' + ph;
+  el.box.style.width = 'min(100%, ' + (70 * ratio).toFixed(2) + 'vh)';
+  el.box.removeAttribute('data-empty'); el.ph.hidden = true; el.before.hidden = false; el.after.hidden = false;
+
+  KEYS.forEach(function (key) { $(IDS[key]).disabled = false; });
+  setParams(DEFAULTS); markPreset(null); setScale(1); setPos(50);
+  el.info.innerHTML = '';
+  var b = document.createElement('b'); b.textContent = f.name;
+  el.info.appendChild(b);
+  el.info.appendChild(document.createTextNode(' (' + sizeText(f.size) + ', ' + nw + ' x ' + nh + ' px)' + (k < 1 ? ' - reduced to ' + ww + ' x ' + wh + ' for processing' : '')));
+  say('Photo loaded. Pick a preset or move a slider.', 'ok');
+}
+
+/* --- sliders --- */
+function readParams() { var p = {}; KEYS.forEach(function (key) { p[key] = +$(IDS[key]).value; }); return p; }
+function setParams(p) { KEYS.forEach(function (key) { $(IDS[key]).value = p[key]; $(IDS[key] + 'V').textContent = p[key]; }); }
+function markPreset(name) {
+  document.querySelectorAll('#aiph [data-preset]').forEach(function (b) { b.classList.toggle('on', b.dataset.preset === name && name !== 'reset'); });
+}
+KEYS.forEach(function (key) {
+  $(IDS[key]).addEventListener('input', function () { $(IDS[key] + 'V').textContent = this.value; markPreset(null); schedule(); });
+});
+function schedule() { clearTimeout(liveTimer); liveTimer = setTimeout(runPreview, LIVE_DELAY); }
+
+/* --- presets --- */
+document.querySelectorAll('#aiph [data-preset]').forEach(function (b) {
+  b.addEventListener('click', function () {
+    if (!ready) { say('No image selected. Please choose a photo first.', 'err'); return; }
+    var name = b.dataset.preset;
+    if (name === 'reset') { setParams(DEFAULTS); setScale(1); }
+    else setParams(name === 'auto' ? autoSettings(baseData.data) : PRESETS[name]);
+    markPreset(name); say(''); clearTimeout(liveTimer); runPreview();
+  });
+});
+
+/* --- scale (Original, 1.5x, 2x) and output size --- */
+function outSize() {
+  var f = Math.min(scale, Math.sqrt(MAX_OUTPUT_PIXELS / (work.width * work.height)));
+  return { w: Math.round(work.width * f), h: Math.round(work.height * f), limited: f < scale - 0.001 };
+}
+function showSize() {
+  if (!ready) { el.size.textContent = ''; return; }
+  var s = outSize();
+  el.size.textContent = 'Download size: ' + s.w + ' x ' + s.h + ' px' + (s.limited ? ' (limited to about 16 megapixels to protect your browser)' : '');
+}
+function setScale(v) {
+  scale = v;
+  document.querySelectorAll('#aiph [data-scale]').forEach(function (b) { var on = +b.dataset.scale === v; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
+  showSize();
+}
+document.querySelectorAll('#aiph [data-scale]').forEach(function (b) { b.addEventListener('click', function () { setScale(+b.dataset.scale); }); });
+
+/* --- live preview (small copy of the photo, so sliders feel fast) --- */
+async function runPreview() {
+  if (!ready) return;
+  if (working) { dirty = true; return; }
+  working = true; dirty = false; busyOn('Enhancing...', false);
+  try {
+    await sleep(20);                                                  // let the loading state appear
+    var copy = new ImageData(new Uint8ClampedArray(baseData.data), baseData.width, baseData.height);
+    enhance(copy, readParams());
+    actx.putImageData(copy, 0, 0);
+  } catch (e) { console.error(e); say('Image processing failed. Please try a smaller photo or another browser.', 'err'); }
+  finally { working = false; busyOff(); if (dirty) runPreview(); }
+}
+
+/* --- before / after slider --- */
+function setPos(v) {
+  pos = clamp(v, 0, 100);
+  el.after.style.clipPath = 'inset(0 0 0 ' + pos + '%)';             // enhanced photo is shown on the RIGHT of the line
+  el.line.style.left = pos + '%'; el.pos.value = pos;
+  var mode = pos >= 99.5 ? 'before' : pos <= 0.5 ? 'after' : 'split';
+  document.querySelectorAll('#aiph [data-view]').forEach(function (b) { var on = b.dataset.view === mode; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
+}
+el.pos.addEventListener('input', function () { setPos(+this.value); });
+document.querySelectorAll('#aiph [data-view]').forEach(function (b) {
+  b.addEventListener('click', function () { setPos(b.dataset.view === 'before' ? 100 : b.dataset.view === 'after' ? 0 : 50); });
+});
+var dragging = false;
+function moveFrom(e) { var r = el.box.getBoundingClientRect(); if (r.width > 0) setPos((e.clientX - r.left) / r.width * 100); }
+el.box.addEventListener('pointerdown', function (e) { if (!ready) return; dragging = true; try { el.box.setPointerCapture(e.pointerId); } catch (x) { } moveFrom(e); });
+el.box.addEventListener('pointermove', function (e) { if (dragging) moveFrom(e); });
+['pointerup', 'pointercancel'].forEach(function (n) { el.box.addEventListener(n, function () { dragging = false; }); });
+
+/* --- download the full-size result --- */
+async function download() {
+  if (!ready) { say('No image selected. Please choose a photo first.', 'err'); return; }
+  while (working) await sleep(30);                                    // wait for a running preview
+  working = true; clearTimeout(liveTimer); say(''); busyOn('Creating full-size image...', true); el.dl.disabled = true;
+  var c = null;
+  try {
+    await sleep(40);
+    var s = outSize();
+    c = document.createElement('canvas'); c.width = s.w; c.height = s.h;
+    var cx = c.getContext('2d', { willReadFrequently: true });
+    cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
+    cx.drawImage(work, 0, 0, s.w, s.h);                               // 1) scale
+    var id = cx.getImageData(0, 0, s.w, s.h);
+    enhance(id, readParams());                                        // 2) enhance
+    cx.putImageData(id, 0, 0);
+    var jpg = el.fmt.value === 'jpg', out = c;
+    if (jpg) {                                                        // JPG has no transparency: put the photo on white
+      out = document.createElement('canvas'); out.width = s.w; out.height = s.h;
+      var ox = out.getContext('2d'); ox.fillStyle = '#fff'; ox.fillRect(0, 0, s.w, s.h); ox.drawImage(c, 0, 0);
+    }
+    var blob = await new Promise(function (res) { out.toBlob(res, jpg ? 'image/jpeg' : 'image/png', JPG_QUALITY); });
+    if (!blob) throw new Error('The browser could not create the file');
+    var a = document.createElement('a'), url = URL.createObjectURL(blob);
+    a.href = url; a.download = fileName + '-enhanced.' + (jpg ? 'jpg' : 'png');
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+    if (out !== c) { out.width = 0; }
+    say('Downloaded ' + a.download + ' (' + s.w + ' x ' + s.h + ' px, ' + sizeText(blob.size) + ').', 'ok');
+  } catch (e) {
+    console.error(e); say('Image processing failed. Try a smaller photo, a smaller scale, or another browser.', 'err');
+  } finally {
+    if (c) c.width = 0;
+    working = false; busyOff(); el.dl.disabled = false; if (dirty) runPreview();
+  }
+}
+
+/* --- wire up the upload area and buttons --- */
+el.pick.addEventListener('click', function (e) { e.stopPropagation(); el.file.click(); });
+el.drop.addEventListener('click', function () { el.file.click(); });
+el.drop.addEventListener('keydown', function (e) { if ((e.key === 'Enter' || e.key === ' ') && e.target === el.drop) { e.preventDefault(); el.file.click(); } });
+el.file.addEventListener('change', function () { var f = el.file.files && el.file.files[0]; el.file.value = ''; if (f) loadFile(f); else say('No image selected. Please choose a photo first.', 'err'); });
+['dragenter', 'dragover'].forEach(function (n) { el.drop.addEventListener(n, function (e) { e.preventDefault(); el.drop.classList.add('over'); }); });
+['dragleave', 'drop'].forEach(function (n) { el.drop.addEventListener(n, function (e) { e.preventDefault(); el.drop.classList.remove('over'); }); });
+el.drop.addEventListener('drop', function (e) { if (e.dataTransfer && e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]); });
+el.dl.addEventListener('click', download);
+setPos(50);
+})();
+</script>
+
+<script>
+/* Tool switcher: "Remove Background" / "Unblur & Enhance" inside the AI Photoshop page */
+(function () {
+  var btns = document.querySelectorAll('#aiph [data-ait]');
+  btns.forEach(function (b) {
+    b.addEventListener('click', function () {
+      btns.forEach(function (x) { var on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-pressed', on); });
+      var bg = document.getElementById('aiToolBg'), en = document.getElementById('aiToolEn');
+      if (bg) bg.hidden = b.dataset.ait !== 'bg';
+      if (en) en.hidden = b.dataset.ait !== 'en';
+    });
+  });
+})();
+</script>
+'''
+
+
 def inject_screener(html_doc: str) -> str:
     """PRIVATE use: if screener_data.json / screener_public.json (made by convert_screener.py) sits next to this
     script, add the Market / Screener / Heatmap / ... tabs. Nothing is added when the file is absent, so a
@@ -2354,7 +5028,7 @@ def inject_screener(html_doc: str) -> str:
     data = data.replace("</", "<\\/")
     block = (SCREENER_BLOCK.replace("__HYDRO__", json.dumps(hydro_symbols()))
              .replace("__HYDW__", json.dumps(hydro_weights()))
-             .replace("__SDATA__", data))
+             .replace("__SDATA__", data)) + CALCULATORS_BLOCK + AI_PHOTOSHOP_BLOCK
     return html_doc.replace("</body>", block + "</body>", 1)
 
 
@@ -2926,6 +5600,10 @@ def cmd_publish(args):
     out = Path(__file__).resolve().parent / "public_site"
     out.mkdir(exist_ok=True)
     (out / "index.html").write_text(html_doc, encoding="utf-8")
+    extra = Path(__file__).resolve().parent / "ai-photoshop.html"      # standalone AI Photoshop page (optional)
+    if extra.is_file():
+        (out / "ai-photoshop.html").write_text(extra.read_text(encoding="utf-8"), encoding="utf-8")
+        print(f"Copied {extra.name} to {out}")
     print(f"Public site written to: {out / 'index.html'}  ({len(html_doc) // 1024} KB)")
 
 
