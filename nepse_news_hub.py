@@ -4585,6 +4585,17 @@ AI_PHOTOSHOP_BLOCK = r'''<style>
        <div class="encap" id="ppPeopleCap">One person only? Just download the print sheet. For several people: position each person's photo, click the button above, then load the next photo. The copies are shared equally between the people.</div>
       </div>
       <div class="twocol">
+       <div><label for="ppPaper">Paper</label>
+        <select id="ppPaper" class="fsel"><option value="a4p" selected>A4 portrait (210 x 297 mm)</option><option value="a4l">A4 landscape (297 x 210 mm)</option><option value="p46">4 x 6 in photo paper</option><option value="p57">5 x 7 in photo paper</option></select></div>
+       <div><label for="ppLayout">Layout</label>
+        <select id="ppLayout" class="fsel"><option value="center" selected>Centered, evenly spaced</option><option value="top">Compact at the top (saves paper)</option></select></div>
+      </div>
+      <div class="twocol">
+       <div><label for="ppCuts">Cutting guides</label>
+        <select id="ppCuts" class="fsel"><option value="marks" selected>Corner marks</option><option value="box">Thin lines around photos</option><option value="none">None</option></select></div>
+       <div></div>
+      </div>
+      <div class="twocol">
        <div><label for="ppCopies">Copies on sheet</label>
         <select id="ppCopies" class="fsel"><option value="2">2</option><option value="4">4</option><option value="6">6</option><option value="8" selected>8</option><option value="10">10</option><option value="12">12</option><option value="max">As many as fit</option></select></div>
        <div><label for="ppSheetFmt">Sheet file</label>
@@ -5257,11 +5268,18 @@ var EDIT_LONG = 640;                  // editor picture size (px, longest side).
 var JPG_QUALITY = 0.95;               // quality of the downloaded JPG (0 to 1)
 
 // A4 print sheet (all values in millimetres)
-var A4_W = 210, A4_H = 297;
-var PRINT_MARGIN = 10;                // empty border around the sheet (printers cannot print to the edge)
-var CAPTION_SPACE = 6;                // space kept free at the bottom for the small caption
-var GAP = 3;                          // space between photos
-var CUT_OFFSET = 0.35;                // the thin cut line is drawn this far outside each photo
+// Paper choices for the print sheet (sizes in millimetres).
+//   margin = empty border (printers cannot print to the very edge)   gap = smallest space between photos
+//   cap    = space kept free at the bottom for the small caption + 35 mm scale bar (0 = no caption)
+var PAPERS = {
+  a4p: { label: 'A4 portrait',   w: 210,   h: 297,   margin: 10, gap: 3, cap: 6 },
+  a4l: { label: 'A4 landscape',  w: 297,   h: 210,   margin: 10, gap: 3, cap: 6 },
+  p46: { label: '4 x 6 in',      w: 152.4, h: 101.6, margin: 3,  gap: 2, cap: 0 },
+  p57: { label: '5 x 7 in',      w: 177.8, h: 127,   margin: 5,  gap: 2, cap: 0 }
+};
+var SPREAD_MAX = 10;                  // "Centered" layout: largest space left between photos (mm)
+var MARK_OFFSET = 0.4, MARK_LEN = 2.5; // corner cut marks: distance from the photo and length (mm)
+var CUT_OFFSET = 0.35;                // thin cut-line boxes are drawn this far outside each photo
 
 // Automatic background check (looks at the top-left and top-right corners)
 var BG_WHITE_MIN = 215;               // each colour must be at least this bright (0-255)
@@ -5292,7 +5310,7 @@ var el = {
   bright: $('ppBright'), contrast: $('ppContrast'), sharp: $('ppSharp'), adjReset: $('ppAdjReset'),
   final: $('ppFinal'), finalBox: $('ppFinalBox'), finalCap: $('ppFinalCap'), list: $('ppChecklist'),
   dlJpg: $('ppDlJpg'), jpgCap: $('ppJpgCap'), copies: $('ppCopies'), sheetFmt: $('ppSheetFmt'), dlSheet: $('ppDlSheet'), sheetCap: $('ppSheetCap'),
-  addPerson: $('ppAddPerson'), people: $('ppPeople'), peopleCap: $('ppPeopleCap')
+  paper: $('ppPaper'), layout: $('ppLayout'), cuts: $('ppCuts'), addPerson: $('ppAddPerson'), people: $('ppPeople'), peopleCap: $('ppPeopleCap')
 };
 if (!el.drop) return;
 var ectx = el.canvas.getContext('2d', { willReadFrequently: true });
@@ -5625,7 +5643,6 @@ async function downloadDigital() {
 el.dlJpg.addEventListener('click', downloadDigital);
 
 /* --- A4 print sheet --- */
-// Work out how many photos fit on the sheet and where each one goes (millimetres from the top-left corner).
 /* People on the sheet. Each entry = one finished passport photo (a canvas at the exact pixel size) for one person. */
 var people = [], MAX_PEOPLE = 12;
 function specKey(S) { return S.id + ':' + S.w + 'x' + S.h + ':' + S.pxW + 'x' + S.pxH; }
@@ -5640,17 +5657,49 @@ function shareCopies(n, P) {
 }
 
 // Work out how many photos fit on the sheet and where each one goes (millimetres from the top-left corner).
+// Also builds the cutting guides (corner marks or thin boxes) and the 35 mm scale bar.
 function sheetLayout(w, h, copies) {
-  var uw = A4_W - 2 * PRINT_MARGIN, uh = A4_H - 2 * PRINT_MARGIN - CAPTION_SPACE;
-  var cols = Math.floor((uw + GAP) / (w + GAP)), rows = Math.floor((uh + GAP) / (h + GAP));
+  var P = PAPERS[el.paper.value] || PAPERS.a4p, g = P.gap;
+  var uw = P.w - 2 * P.margin, uh = P.h - 2 * P.margin - P.cap;
+  var cols = Math.floor((uw + g) / (w + g)), rows = Math.floor((uh + g) / (h + g));
   if (cols < 1 || rows < 1) return null;
   var n = copies === 'max' ? cols * rows : Math.min(+copies, cols * rows);
-  var P = Math.max(1, people.length);
-  if (n < P) return { tooFew: true, n: n, people: P, maxFit: cols * rows };
-  var cu = Math.min(cols, n), ru = Math.ceil(n / cu), bw = cu * w + (cu - 1) * GAP, x0 = (A4_W - bw) / 2, pos = [];
-  var sh = shareCopies(n, P);
-  for (var i = 0; i < n; i++) pos.push({ x: x0 + (i % cu) * (w + GAP), y: PRINT_MARGIN + Math.floor(i / cu) * (h + GAP), who: sh.who[i] });
-  return { n: n, cols: cu, rows: ru, maxFit: cols * rows, pos: pos, counts: sh.counts };
+  var Pn = Math.max(1, people.length);
+  if (n < Pn) return { tooFew: true, n: n, people: Pn, maxFit: cols * rows, paper: P };
+  // tidy rectangle: 8 photos = 4 x 2 (not 5 + 3), 12 = 4 x 3, 6 = 3 x 2 ...
+  var ru = Math.ceil(n / cols), cu = Math.ceil(n / ru);
+  var gx = g, gy = g;
+  if (el.layout.value === 'center') {                      // spread the photos out evenly, like a photo studio
+    var availH = P.h - P.cap;
+    gx = Math.max(g, Math.min(SPREAD_MAX, (P.w - cu * w) / (cu + 1)));
+    gy = Math.max(g, Math.min(SPREAD_MAX, (availH - ru * h) / (ru + 1)));
+    if (cu > 1 && cu * w + (cu - 1) * gx > uw) gx = (uw - cu * w) / (cu - 1);
+    if (ru > 1 && ru * h + (ru - 1) * gy > uh) gy = (uh - ru * h) / (ru - 1);
+  }
+  var bw = cu * w + (cu - 1) * gx, bh = ru * h + (ru - 1) * gy;
+  var x0 = (P.w - bw) / 2, y0 = el.layout.value === 'center' ? (P.h - P.cap - bh) / 2 : P.margin;
+  y0 = Math.max(P.margin, y0);
+  var sh = shareCopies(n, Pn), pos = [];
+  for (var i = 0; i < n; i++) {
+    var r = Math.floor(i / cu), c = i % cu, inRow = r === ru - 1 ? n - r * cu : cu;     // last row may have fewer photos: centre it
+    pos.push({ x: x0 + c * (w + gx) + (cu - inRow) * (w + gx) / 2, y: y0 + r * (h + gy), who: sh.who[i] });
+  }
+  // cutting guides as line segments [x1, y1, x2, y2]
+  var segs = [], mode = el.cuts.value, t = Math.min(MARK_LEN, Math.min(gx, gy) / 2 - MARK_OFFSET - 0.1);
+  if (mode === 'marks' && t < 1.2) mode = 'box';          // not enough room between photos: use thin lines instead
+  pos.forEach(function (p) {
+    var x1 = p.x, x2 = p.x + w, y1 = p.y, y2 = p.y + h;
+    if (mode === 'box') {
+      var o = CUT_OFFSET; segs.push([x1 - o, y1 - o, x2 + o, y1 - o], [x2 + o, y1 - o, x2 + o, y2 + o], [x2 + o, y2 + o, x1 - o, y2 + o], [x1 - o, y2 + o, x1 - o, y1 - o]);
+    } else if (mode === 'marks') {
+      var m = MARK_OFFSET;
+      [[x1, y1, -1, -1], [x2, y1, 1, -1], [x1, y2, -1, 1], [x2, y2, 1, 1]].forEach(function (q) {
+        segs.push([q[0] + q[2] * m, q[1], q[0] + q[2] * (m + t), q[1]], [q[0], q[1] + q[3] * m, q[0], q[1] + q[3] * (m + t)]);
+      });
+    }
+  });
+  var bar = P.cap ? { x: P.w - P.margin - 35, y: P.h - P.margin - 1.5, len: 35 } : null;   // 35 mm ruler: measure it after printing
+  return { n: n, cols: cu, rows: ru, maxFit: cols * rows, pos: pos, counts: sh.counts, paper: P, segs: segs, bar: bar, mode: mode };
 }
 function peopleText(L) {
   if (!people.length) return '';
@@ -5658,11 +5707,11 @@ function peopleText(L) {
 }
 function updateSheetCaption() {
   var S = getSpec(), L = sheetLayout(S.w, S.h, el.copies.value);
-  if (!L) el.sheetCap.textContent = 'This photo size does not fit on an A4 sheet.';
+  if (!L) el.sheetCap.textContent = 'This photo size does not fit on this paper.';
   else if (L.tooFew) el.sheetCap.textContent = 'You have ' + L.people + ' people but only ' + L.n + ' copies. Choose at least ' + L.people + ' copies so everyone gets a photo.';
-  else el.sheetCap.textContent = 'A4 (210 x 297 mm), ' + PRINT_MARGIN + ' mm margins: ' + L.n + ' photos (' + L.cols + ' x ' + L.rows + '; up to ' + L.maxFit + ' fit). Print at 100% / "Actual size".' + peopleText(L);
+  else el.sheetCap.textContent = L.paper.label + ' (' + +L.paper.w.toFixed(1) + ' x ' + +L.paper.h.toFixed(1) + ' mm): ' + L.n + ' photos (' + L.cols + ' x ' + L.rows + '; up to ' + L.maxFit + ' fit). Print at 100% / "Actual size".' + (L.bar ? ' The 35 mm bar on the sheet should measure exactly 35 mm.' : '') + peopleText(L);
 }
-el.copies.addEventListener('change', updateSheetCaption);
+['change'].forEach(function (ev) { el.copies.addEventListener(ev, updateSheetCaption); el.paper.addEventListener(ev, updateSheetCaption); el.layout.addEventListener(ev, updateSheetCaption); el.cuts.addEventListener(ev, updateSheetCaption); });
 
 /* --- several people on one sheet --- */
 function renderPeople() {
@@ -5702,23 +5751,31 @@ el.addPerson.addEventListener('click', async function () {
 
 // Build a small PDF file by hand: one A4 page, the photo stored once and placed several times, thin cut lines.
 function buildPdf(jpgs, imgW, imgH, S, L) {
-  var enc = new TextEncoder(), parts = [], offs = [], len = 0, k = 72 / 25.4, K = jpgs.length;
+  var enc = new TextEncoder(), parts = [], offs = [], len = 0, k = 72 / 25.4, K = jpgs.length, P = L.paper;
   function push(u8) { parts.push(u8); len += u8.length; }
   function str(s) { push(enc.encode(s)); }
   function f(n) { return n.toFixed(3); }
   var cap = S.label.replace(/[()\\]/g, '') + ' - ' + S.w + ' x ' + S.h + ' mm - ' + L.n + ' photos' + (K > 1 ? ' - ' + K + ' people' : '') + ' - print at 100% (Actual size), do not use Fit to page';
   var c = '';
-  L.pos.forEach(function (p) { c += 'q ' + f(S.w * k) + ' 0 0 ' + f(S.h * k) + ' ' + f(p.x * k) + ' ' + f((A4_H - p.y - S.h) * k) + ' cm /Im' + p.who + ' Do Q\n'; });
-  c += '0.55 G 0.25 w\n';                                              // thin grey cut lines just outside each photo
-  L.pos.forEach(function (p) { c += f((p.x - CUT_OFFSET) * k) + ' ' + f((A4_H - p.y - S.h - CUT_OFFSET) * k) + ' ' + f((S.w + 2 * CUT_OFFSET) * k) + ' ' + f((S.h + 2 * CUT_OFFSET) * k) + ' re S\n'; });
-  c += 'BT /F1 7 Tf 0.35 g ' + f(PRINT_MARGIN * k) + ' ' + f((PRINT_MARGIN + 1) * k) + ' Td (' + cap + ') Tj ET\n';
+  L.pos.forEach(function (p) { c += 'q ' + f(S.w * k) + ' 0 0 ' + f(S.h * k) + ' ' + f(p.x * k) + ' ' + f((P.h - p.y - S.h) * k) + ' cm /Im' + p.who + ' Do Q\n'; });
+  if (L.segs.length) {                                                 // thin grey cutting guides
+    c += '0.45 G 0.25 w\n';
+    L.segs.forEach(function (q) { c += f(q[0] * k) + ' ' + f((P.h - q[1]) * k) + ' m ' + f(q[2] * k) + ' ' + f((P.h - q[3]) * k) + ' l S\n'; });
+  }
+  if (L.bar) {                                                         // caption + 35 mm scale bar (measure it with a ruler after printing)
+    var by = (P.h - L.bar.y) * k;
+    c += 'BT /F1 7 Tf 0.35 g ' + f(P.margin * k) + ' ' + f((P.margin + 1) * k) + ' Td (' + cap + ') Tj ET\n';
+    c += '0.2 G 0.5 w ' + f(L.bar.x * k) + ' ' + f(by) + ' m ' + f((L.bar.x + L.bar.len) * k) + ' ' + f(by) + ' l S\n';
+    c += '0.5 w ' + f(L.bar.x * k) + ' ' + f(by - 1.5 * k) + ' m ' + f(L.bar.x * k) + ' ' + f(by + 1.5 * k) + ' l S ' + f((L.bar.x + L.bar.len) * k) + ' ' + f(by - 1.5 * k) + ' m ' + f((L.bar.x + L.bar.len) * k) + ' ' + f(by + 1.5 * k) + ' l S\n';
+    c += 'BT /F1 6 Tf 0.35 g ' + f((L.bar.x + 8) * k) + ' ' + f(by + 2.2 * k) + ' Td (35 mm - check after printing) Tj ET\n';
+  }
   function obj(n, body) { offs[n] = len; str(n + ' 0 obj\n' + body + '\nendobj\n'); }
   // object numbers: 1 catalog, 2 pages, 3 page, 4 page content, 5 font, 6... one picture per person
   var xo = ''; for (var i = 0; i < K; i++) xo += '/Im' + i + ' ' + (6 + i) + ' 0 R ';
   push(new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E, 0x34, 0x0A, 0x25, 0xE2, 0xE3, 0xCF, 0xD3, 0x0A]));   // %PDF-1.4
   obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
   obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
-  obj(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + f(A4_W * k) + ' ' + f(A4_H * k) + '] /Resources << /XObject << ' + xo + '>> /Font << /F1 5 0 R >> >> /Contents 4 0 R >>');
+  obj(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + f(P.w * k) + ' ' + f(P.h * k) + '] /Resources << /XObject << ' + xo + '>> /Font << /F1 5 0 R >> >> /Contents 4 0 R >>');
   obj(4, '<< /Length ' + enc.encode(c).length + ' >>\nstream\n' + c + 'endstream');
   obj(5, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
   for (var j = 0; j < K; j++) {
@@ -5736,14 +5793,23 @@ function buildPdf(jpgs, imgW, imgH, S, L) {
 
 // The same sheet as a JPG picture (A4 at 300 DPI).
 async function buildSheetJpg(photos, S, L) {
-  var px = function (mm) { return mm / 25.4 * DPI; }, c = mk(Math.round(px(A4_W)), Math.round(px(A4_H))), cx = c.getContext('2d');
+  var P = L.paper, px = function (mm) { return mm / 25.4 * DPI; }, c = mk(Math.round(px(P.w)), Math.round(px(P.h))), cx = c.getContext('2d');
   cx.fillStyle = '#fff'; cx.fillRect(0, 0, c.width, c.height);
   cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
   L.pos.forEach(function (p) { cx.drawImage(photos[p.who], px(p.x), px(p.y), px(S.w), px(S.h)); });
-  cx.strokeStyle = '#8c8c8c'; cx.lineWidth = Math.max(1, px(0.2));
-  L.pos.forEach(function (p) { cx.strokeRect(px(p.x - CUT_OFFSET), px(p.y - CUT_OFFSET), px(S.w + 2 * CUT_OFFSET), px(S.h + 2 * CUT_OFFSET)); });
-  cx.fillStyle = '#595959'; cx.font = Math.round(px(2.4)) + 'px Arial, sans-serif'; cx.textBaseline = 'alphabetic';
-  cx.fillText(S.label + ' - ' + S.w + ' x ' + S.h + ' mm - ' + L.n + ' photos - print at 100% (Actual size)', px(PRINT_MARGIN), c.height - px(PRINT_MARGIN));
+  if (L.segs.length) {
+    cx.strokeStyle = '#737373'; cx.lineWidth = Math.max(1, px(0.2)); cx.beginPath();
+    L.segs.forEach(function (q) { cx.moveTo(px(q[0]), px(q[1])); cx.lineTo(px(q[2]), px(q[3])); }); cx.stroke();
+  }
+  if (L.bar) {
+    cx.fillStyle = '#595959'; cx.font = Math.round(px(2.4)) + 'px Arial, sans-serif'; cx.textBaseline = 'alphabetic';
+    cx.fillText(S.label + ' - ' + S.w + ' x ' + S.h + ' mm - ' + L.n + ' photos - print at 100% (Actual size)', px(P.margin), c.height - px(P.margin));
+    cx.strokeStyle = '#333'; cx.lineWidth = Math.max(1, px(0.2)); cx.beginPath();
+    cx.moveTo(px(L.bar.x), px(L.bar.y)); cx.lineTo(px(L.bar.x + L.bar.len), px(L.bar.y));
+    cx.moveTo(px(L.bar.x), px(L.bar.y - 1.5)); cx.lineTo(px(L.bar.x), px(L.bar.y + 1.5));
+    cx.moveTo(px(L.bar.x + L.bar.len), px(L.bar.y - 1.5)); cx.lineTo(px(L.bar.x + L.bar.len), px(L.bar.y + 1.5)); cx.stroke();
+    cx.font = Math.round(px(2)) + 'px Arial, sans-serif'; cx.fillText('35 mm - check after printing', px(L.bar.x + 8), px(L.bar.y - 2.2));
+  }
   var r = await jpegBytes(c, JPG_QUALITY, 0); c.width = 0; return r.buf;
 }
 
@@ -5752,7 +5818,7 @@ async function downloadSheet() {
   var S = getSpec();
   if (people.some(function (p) { return p.key !== specKey(S); })) { checkPeopleSize(); return; }
   var L = sheetLayout(S.w, S.h, el.copies.value);
-  if (!L) { say(el.msg2, 'This photo size does not fit on an A4 sheet.', 'err'); return; }
+  if (!L) { say(el.msg2, 'This photo size does not fit on this paper.', 'err'); return; }
   if (L.tooFew) { say(el.msg2, 'You have ' + L.people + ' people but only ' + L.n + ' copies on the sheet. Choose at least ' + L.people + ' copies.', 'err'); return; }
   say(el.msg2, ''); busyOn('Creating print sheet...'); el.dlSheet.disabled = true;
   var temp = null;
@@ -5764,14 +5830,14 @@ async function downloadSheet() {
     if (fmt === 'pdf') {
       var jpgs = [];
       for (var i = 0; i < canvases.length; i++) jpgs.push(new Uint8Array((await jpegBytes(canvases[i], JPG_QUALITY, 0)).buf));
-      blob = new Blob([buildPdf(jpgs, S.pxW, S.pxH, S, L)], { type: 'application/pdf' }); name = 'passport-sheet-A4-' + S.id + '-' + tag + '.pdf';
+      blob = new Blob([buildPdf(jpgs, S.pxW, S.pxH, S, L)], { type: 'application/pdf' }); name = 'passport-sheet-' + el.paper.value + '-' + S.id + '-' + tag + '.pdf';
     } else {
-      blob = new Blob([await buildSheetJpg(canvases, S, L)], { type: 'image/jpeg' }); name = 'passport-sheet-A4-' + S.id + '-' + tag + '.jpg';
+      blob = new Blob([await buildSheetJpg(canvases, S, L)], { type: 'image/jpeg' }); name = 'passport-sheet-' + el.paper.value + '-' + S.id + '-' + tag + '.jpg';
     }
     if (temp) temp.width = 0;
     saveBlob(blob, name);
     var extra = canvases.length > 1 ? ' for ' + canvases.length + ' people (' + L.counts.join(' + ') + ')' : '';
-    doneMessage('Downloaded ' + name + ' (' + L.n + ' photos on A4' + extra + ', ' + sizeText(blob.size) + '). Print at 100% / Actual size.');
+    doneMessage('Downloaded ' + name + ' (' + L.n + ' photos on ' + L.paper.label + extra + ', ' + sizeText(blob.size) + '). Print at 100% / Actual size.');
   } catch (e) { console.error(e); say(el.msg2, 'Image processing failed. Please try fewer copies, a smaller photo or another browser.', 'err'); }
   finally { busyOff(); el.dlSheet.disabled = false; }
 }
