@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AI Photoshop - Unblur &amp; Enhance Photo, Remove Background | Binjal Halwai NewsPortal</title>
-<meta name="description" content="Free photo tools: unblur and enhance photos privately in your browser, and remove image backgrounds to get a transparent PNG.">
+<title>AI Photoshop - Remove Background, Unblur, Passport Photo | Binjal Halwai NewsPortal</title>
+<meta name="description" content="Free photo tools: remove image backgrounds, unblur and enhance photos, and make passport photos (Nepal 35 x 45 mm, US, custom) privately in your browser.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%234d5b2a'/%3E%3Ctext x='16' y='22' font-size='15' font-weight='700' text-anchor='middle' fill='white' font-family='Arial'%3EBH%3C/text%3E%3C/svg%3E">
 <script>try{var t=localStorage.getItem('aiph_theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
 <style>
@@ -129,6 +129,7 @@ footer{border-top:1px solid var(--ln);padding:14px 20px;font-size:12px;color:var
  <div class="aitools" role="group" aria-label="AI Photoshop tools">
   <button type="button" class="aitool on" data-ait="bg" aria-pressed="true">Remove Background</button>
   <button type="button" class="aitool" data-ait="en" aria-pressed="false">Unblur &amp; Enhance</button>
+  <button type="button" class="aitool" data-ait="pass" aria-pressed="false">Passport Photo</button>
  </div>
 <div id="aiToolBg">
  <div class="chead"><h2>Remove Image Background</h2>
@@ -231,6 +232,120 @@ footer{border-top:1px solid var(--ln);padding:14px 20px;font-size:12px;color:var
   </div>
  </div>
 </div>
+<div id="aiToolPass" hidden>
+<div id="pass">
+ <div class="chead"><h2>Passport Photo Maker</h2>
+  <p>Make a passport photo (Nepal 35 &times; 45 mm by default) and an A4 sheet ready to print. Everything happens inside your browser: your photo is never uploaded or stored.</p></div>
+
+ <div class="ppgrid">
+
+  <!-- 1. UPLOAD -->
+  <div class="cc pp-up">
+   <h3>1. Choose photo</h3>
+   <div class="drop" id="ppDrop" tabindex="0" role="button" aria-label="Choose a photo or drop it here">
+    <button type="button" class="abtn" id="ppPick">Choose Photo</button>
+    <p>or drag and drop it here<br>JPG, PNG or WebP, up to 15 MB</p>
+    <input type="file" id="ppFile" accept="image/jpeg,image/png,image/webp" hidden>
+   </div>
+   <div class="finfo" id="ppInfo"></div>
+   <div class="amsg" id="ppMsg" role="status" aria-live="polite"></div>
+  </div>
+
+  <!-- 2. EDITOR: drag + zoom the photo under a fixed 35:45 frame -->
+  <div class="cc pp-ed">
+   <h3>2. Position your face</h3>
+   <div class="ppwrap">
+    <div class="ppframe" id="ppFrame" tabindex="0" role="group" aria-label="Photo editor. Drag to move the photo, scroll or use the zoom slider to zoom. Arrow keys also move the photo.">
+     <canvas id="ppCanvas" hidden></canvas>
+     <span class="ppph" id="ppPh">Your photo will appear here</span>
+     <div class="ppguides" id="ppGuides" hidden></div>
+     <div class="busy" id="ppBusy" role="alert"><div class="spin" aria-hidden="true"></div><span id="ppBusyTxt">Working...</span></div>
+    </div>
+   </div>
+   <div class="zoomrow"><label for="ppZoom">Zoom</label><input type="range" id="ppZoom" min="-100" max="100" value="0" disabled><output id="ppZoomV" for="ppZoom">100%</output></div>
+   <div class="ctlrow">
+    <label class="chk"><input type="checkbox" id="ppShowGuides" checked> Show guides</label>
+    <button type="button" class="abtn ghost" id="ppFit">Reset position</button>
+   </div>
+   <div class="bgstat" id="ppBg">Background check: choose a photo first.</div>
+   <div class="legend" aria-label="Guide legend">
+    <span><i style="border-color:#e11d48"></i>Top of head</span>
+    <span><i class="bx"></i>Chin zone (head height)</span>
+    <span><i style="border-color:#1d4ed8;border-top-style:dashed"></i>Centre line</span>
+    <span><i class="tn"></i>Keep background plain white (outside the dashed safe area)</span>
+   </div>
+   <div class="encap">Drag the photo to move it. Zoom with the slider, mouse wheel or by pinching. Put the top of the head on the red line and the chin inside the green zone. Photos with a transparent background (for example from <b>AI Photoshop &rarr; Remove Background</b>) get a white background automatically.</div>
+  </div>
+
+  <!-- 3. SIZE + ADJUSTMENTS -->
+  <div class="cc pp-set">
+   <h3>3. Photo size</h3>
+   <div class="fld"><label for="ppPreset">Country / size</label>
+    <select id="ppPreset" class="fsel">
+     <option value="nepal">Nepal Passport: 35 &times; 45 mm</option>
+     <option value="us">US Passport: 51 &times; 51 mm</option>
+     <option value="custom">Custom size (mm)</option>
+    </select></div>
+   <div class="cust" id="ppCustom" hidden>
+    <div><label for="ppW">Width (mm)</label><input type="number" id="ppW" class="nin" min="20" max="100" step="0.5" value="35"></div>
+    <div><label for="ppH">Height (mm)</label><input type="number" id="ppH" class="nin" min="20" max="100" step="0.5" value="45"></div>
+    <div><label for="ppHmin">Head height min (%)</label><input type="number" id="ppHmin" class="nin" min="30" max="95" step="1" value="70"></div>
+    <div><label for="ppHmax">Head height max (%)</label><input type="number" id="ppHmax" class="nin" min="30" max="95" step="1" value="80"></div>
+   </div>
+   <div class="encap" id="ppSpec"></div>
+   <h3 style="margin-top:14px">4. Adjust</h3>
+   <div class="srow"><label for="ppBright">Brightness</label><output id="ppBrightV" for="ppBright">0</output><input type="range" id="ppBright" min="-50" max="50" value="0"></div>
+   <div class="srow"><label for="ppContrast">Contrast</label><output id="ppContrastV" for="ppContrast">0</output><input type="range" id="ppContrast" min="-50" max="50" value="0"></div>
+   <div class="srow"><label for="ppSharp">Sharpness</label><output id="ppSharpV" for="ppSharp">0</output><input type="range" id="ppSharp" min="0" max="100" value="0"></div>
+   <button type="button" class="abtn ghost" id="ppAdjReset" style="margin-top:4px">Reset adjustments</button>
+  </div>
+
+ </div>
+
+ <!-- 5. RESULT: final preview, checklist, downloads (outside the grid so the sticky editor can never cover it) -->
+ <div class="cc pp-out">
+   <h3>5. Check and download</h3>
+   <div class="outgrid">
+    <div>
+     <div class="finalbox" id="ppFinalBox" style="max-width:220px"><canvas id="ppFinal"></canvas></div>
+     <div class="encap" id="ppFinalCap" style="text-align:center">Final photo (no guides)</div>
+    </div>
+    <div>
+     <div style="font-size:13px;font-weight:700;margin:0 0 8px">Checklist before you download</div>
+     <ul class="checklist" id="ppChecklist">
+      <li><label><input type="checkbox"> Plain white background</label></li>
+      <li><label><input type="checkbox"> Face centered</label></li>
+      <li><label><input type="checkbox"> Eyes open</label></li>
+      <li><label><input type="checkbox"> Neutral expression</label></li>
+      <li><label><input type="checkbox"> No shadows</label></li>
+      <li><label><input type="checkbox"> No hats unless religious/medical reasons</label></li>
+     </ul>
+    </div>
+    <div>
+     <div class="dlrow"><button type="button" class="abtn" id="ppDlJpg">Download Digital Photo</button></div>
+     <div class="encap" id="ppJpgCap"></div>
+     <div class="sheetbox">
+      <div class="peoplebox">
+       <div class="dlrow"><button type="button" class="abtn ghost" id="ppAddPerson">+ Add this photo to the print sheet</button></div>
+       <div class="peoplelist" id="ppPeople" aria-live="polite"></div>
+       <div class="encap" id="ppPeopleCap">One person only? Just download the print sheet. For several people: position each person's photo, click the button above, then load the next photo. The copies are shared equally between the people.</div>
+      </div>
+      <div class="twocol">
+       <div><label for="ppCopies">Copies on sheet</label>
+        <select id="ppCopies" class="fsel"><option value="2">2</option><option value="4">4</option><option value="6">6</option><option value="8" selected>8</option><option value="10">10</option><option value="12">12</option><option value="max">As many as fit</option></select></div>
+       <div><label for="ppSheetFmt">Sheet file</label>
+        <select id="ppSheetFmt" class="fsel"><option value="pdf">PDF (best for printing)</option><option value="jpg">JPG image</option></select></div>
+      </div>
+      <div class="dlrow"><button type="button" class="abtn" id="ppDlSheet">Download Print Sheet</button></div>
+      <div class="encap" id="ppSheetCap"></div>
+     </div>
+    </div>
+   </div>
+   <div class="amsg" id="ppMsg2" role="status" aria-live="polite"></div>
+   <div class="anote">Private: this tool runs entirely in your browser. Nothing is uploaded or stored. Rules can change: always confirm the current photo requirements with the passport office before you apply.</div>
+ </div>
+</div>
+</div>
 </section>
 <script>
 (function () {
@@ -290,16 +405,19 @@ function choose(f) {
 }
 
 function fail(status, serverMsg) {
-  var m;
-  if (status === 400) m = 'The service could not process this image. Try a different photo.' + (serverMsg ? ' (' + serverMsg + ')' : '');
-  else if (status === 402) m = 'The background-removal service has run out of credits. Please try again later.';
-  else if (status === 403) m = 'This website is not allowed to use the service, or the service key is invalid.';
+  var m, code = ' (error ' + status + (serverMsg ? ': ' + serverMsg : '') + ')';
+  if (status === 400) m = 'The service could not process this image. Try a different photo.';
+  else if (status === 401) m = 'The background-removal key was rejected by the provider. The site owner must check the API key in the Worker.';
+  else if (status === 402) m = 'The background-removal service has run out of credits.';
+  else if (status === 403) m = 'The service refused the request. Either this website address is not in the Worker allowed list, or the provider rejected the API key.';
+  else if (status === 404) m = 'The Worker address is wrong (page not found). The site owner must check PROXY_URL.';
   else if (status === 413) m = 'File too large for the service. Please use a smaller image.';
   else if (status === 415) m = 'Unsupported file type. Please use a JPG, PNG or WebP image.';
   else if (status === 429) m = 'Too many requests. Please wait a minute and try again.';
+  else if (status === 500) m = 'The Worker is not set up correctly (the secret REMOVE_BG_API_KEY is probably missing).';
   else if (status >= 500) m = 'The background-removal service is having problems. Please try again later.';
-  else m = 'Something went wrong (error ' + status + ').' + (serverMsg ? ' ' + serverMsg : '');
-  say(m, 'err');
+  else m = 'Something went wrong.';
+  say(m + code + ' You can still use Unblur & Enhance or Passport Photo.', 'err');
 }
 
 async function run() {
@@ -307,7 +425,7 @@ async function run() {
   var p = problem(file);
   if (p) { say(p, 'err'); return; }
   if (PROXY_URL.indexOf('YOUR-SUBDOMAIN') >= 0) {
-    say('Background removal is not available yet. You can try Unblur & Enhance, or check back soon.', 'err'); return;   /* owner: set PROXY_URL above to your deployed Worker address to switch this tool on */
+    say('The background remover is not connected yet. The site owner must set PROXY_URL to the deployed Worker address.', 'err'); return;
   }
   clearAfter(); say(''); setBusy(true);
   var ctl = new AbortController(), timer = setTimeout(function () { ctl.abort(); }, TIMEOUT_MS);
@@ -327,7 +445,7 @@ async function run() {
     say('Done. Check the result, then click Download PNG.', 'ok');
   } catch (e) {
     if (e && e.name === 'AbortError') say('The request took too long and was stopped. Please try again.', 'err');
-    else say('Network error. Please check your internet connection and try again.', 'err');
+    else say('Could not reach the background-removal Worker. Check your internet connection. If it is fine, the site owner should open the Worker address in a browser (it should show status ok) and check that https://binjalhalwai.github.io is in ALLOWED_ORIGINS.', 'err');
   } finally {
     clearTimeout(timer); setBusy(false);
   }
@@ -741,22 +859,678 @@ setPos(50);
 </script>
 
 <script>
-/* Tool switcher: "Remove Background" / "Unblur & Enhance" inside the AI Photoshop page */
+/* Tool switcher: "Remove Background" / "Unblur & Enhance" / "Passport Photo" inside the AI Photoshop page */
 (function () {
   var btns = document.querySelectorAll('#aiph [data-ait]');
   btns.forEach(function (b) {
     b.addEventListener('click', function () {
       btns.forEach(function (x) { var on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-pressed', on); });
-      var bg = document.getElementById('aiToolBg'), en = document.getElementById('aiToolEn');
+      var bg = document.getElementById('aiToolBg'), en = document.getElementById('aiToolEn'), ps = document.getElementById('aiToolPass');
       if (bg) bg.hidden = b.dataset.ait !== 'bg';
       if (en) en.hidden = b.dataset.ait !== 'en';
+      if (ps) ps.hidden = b.dataset.ait !== 'pass';
     });
   });
 })();
 </script>
+<style>
+/* ===== PASSPORT PHOTO MAKER (all rules start with #pass so they never affect other pages) ===== */
+#pass{min-width:0}
+#pass .chead h2{margin:4px 0 4px;font-size:20px}
+#pass .chead p{margin:0 0 12px;color:var(--mu);font-size:13px;max-width:80ch}
+#pass h3{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--mu)}
+#pass .cc{background:var(--p);border:1px solid var(--ln);border-radius:8px;padding:14px;min-width:0}
+/* page layout: left = upload + settings, right = editor, bottom = result */
+#pass .ppgrid{display:grid;grid-template-columns:minmax(0,4fr) minmax(0,8fr);grid-template-rows:auto 1fr;grid-template-areas:"up ed" "set ed";gap:14px;align-items:start}
+#pass .pp-up{grid-area:up}#pass .pp-set{grid-area:set}#pass .pp-out{margin-top:14px}
+#pass .pp-ed{grid-area:ed;position:sticky;top:84px}
+@media(max-width:820px){#pass .ppgrid{grid-template-columns:minmax(0,1fr);grid-template-rows:none;grid-template-areas:"up" "ed" "set"}#pass .pp-ed{position:static}}
+/* buttons, upload area, messages */
+#pass .abtn{background:var(--ac);color:var(--onac);border:0;border-radius:6px;padding:8px 16px;min-height:38px;font:inherit;font-weight:700;font-size:13px;cursor:pointer}
+#pass .abtn:hover:not(:disabled){background:var(--ach)}
+#pass .abtn.ghost{background:var(--p);color:var(--tx);border:1px solid var(--ln);font-weight:600}
+#pass .abtn.ghost:hover:not(:disabled){border-color:var(--ac);color:var(--ac);background:var(--p)}
+#pass .abtn:disabled{opacity:.45;cursor:not-allowed}
+#pass .abtn:focus-visible,#pass .drop:focus-visible,#pass .ppframe:focus-visible,#pass .fsel:focus-visible,#pass input:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+#pass .drop{border:2px dashed var(--ln);border-radius:8px;padding:18px 12px;text-align:center;background:var(--ch);transition:border-color .15s ease}
+#pass .drop.over{border-color:var(--ac)}
+#pass .drop p{margin:8px 0 0;font-size:12px;color:var(--mu)}
+#pass .finfo{margin-top:10px;font-size:12px;color:var(--mu);overflow-wrap:anywhere;min-height:1.2em}
+#pass .finfo b{color:var(--tx)}
+#pass .amsg{margin-top:10px;font-size:13px;min-height:1.3em}
+#pass .amsg.err{background:var(--ch);border:1px solid var(--bad);border-radius:6px;padding:8px 12px;color:var(--bad)}
+#pass .amsg.ok{color:var(--ok)}
+#pass .amsg.warn{background:var(--ch);border:1px solid var(--wa);border-radius:6px;padding:8px 12px;color:var(--tx)}
+#pass .encap{margin-top:8px;font-size:12px;color:var(--mu);overflow-wrap:anywhere}
+/* editor frame: the photo is drawn in the canvas, the guides are drawn on top */
+#pass .ppwrap{display:flex;justify-content:center}
+#pass .ppframe{position:relative;width:100%;aspect-ratio:35/45;background:#fff;border:1px solid var(--ln);border-radius:4px;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab}
+#pass .ppframe.drag{cursor:grabbing}
+#pass .ppframe canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#pass .ppframe canvas[hidden]{display:none}
+#pass .ppph{position:absolute;inset:0;display:grid;place-items:center;padding:12px;text-align:center;color:#555;font-size:12px;background:#f3f3f3;cursor:default}
+#pass .ppph[hidden]{display:none}
+#pass .ppguides{position:absolute;inset:0;pointer-events:none}
+#pass .ppguides[hidden]{display:none}
+#pass .g-safe{position:absolute;border:2px dashed #1d4ed8;box-shadow:0 0 0 999px rgba(29,78,216,.10)}
+#pass .g-center{position:absolute;top:0;bottom:0;left:50%;border-left:2px dashed #1d4ed8;margin-left:-1px}
+#pass .g-crown{position:absolute;left:0;right:0;height:0;border-top:2px solid #e11d48}
+#pass .g-chin{position:absolute;left:0;right:0;background:rgba(22,163,74,.22);border-top:2px solid #16a34a;border-bottom:2px solid #16a34a}
+#pass .g-oval{position:absolute;border:2px dashed rgba(255,255,255,.95);border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.55),inset 0 0 0 1px rgba(0,0,0,.35)}
+#pass .g-lbl{position:absolute;font-size:10px;font-weight:700;line-height:1;padding:2px 6px;border-radius:8px;color:#fff;white-space:nowrap}
+#pass .busy{position:absolute;inset:0;display:none;flex-direction:column;gap:10px;align-items:center;justify-content:center;background:rgba(0,0,0,.55);color:#fff;font-size:13px;text-align:center;padding:10px}
+#pass .busy.on{display:flex}
+#pass .spin{width:34px;height:34px;border:4px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:ppspin .8s linear infinite}
+@keyframes ppspin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){#pass .spin{animation-duration:2.4s}}
+#pass .legend{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:10px;font-size:11px;color:var(--mu)}
+#pass .legend i{display:inline-block;width:14px;height:0;border-top:2px solid;margin-right:5px;vertical-align:middle}
+#pass .legend i.bx{height:9px;border:0;background:rgba(22,163,74,.35);outline:1px solid #16a34a}
+#pass .legend i.tn{height:9px;border:0;background:rgba(29,78,216,.18);outline:1px solid #1d4ed8}
+#pass .ctlrow{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin-top:10px}
+#pass .ctlrow label.chk{display:flex;gap:6px;align-items:center;font-size:12px;font-weight:600}
+#pass .zoomrow{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;margin-top:12px;font-size:12px;font-weight:600}
+#pass .zoomrow output{color:var(--mu);font-variant-numeric:tabular-nums;min-width:4.5em;text-align:right}
+#pass input[type=range]{width:100%;accent-color:var(--ac);min-height:26px}
+#pass .bgstat{margin-top:10px;font-size:12px;border:1px solid var(--ln);border-left-width:4px;border-radius:6px;padding:7px 10px;background:var(--ch)}
+#pass .bgstat.ok{border-left-color:var(--ok)}#pass .bgstat.bad{border-left-color:var(--wa)}
+/* settings */
+#pass .fsel,#pass .nin{width:100%;background:var(--p);color:var(--tx);border:1px solid var(--ln);border-radius:6px;padding:6px 10px;min-height:38px;font:inherit;box-sizing:border-box}
+#pass .fld{margin:0 0 10px}
+#pass .fld label{display:block;font-size:12px;font-weight:600;margin:0 0 4px}
+#pass .cust{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 10px}
+#pass .cust[hidden]{display:none}
+#pass .cust label{display:block;font-size:12px;font-weight:600;margin:0 0 4px}
+#pass .srow{display:grid;grid-template-columns:1fr auto;gap:2px 8px;margin:0 0 8px}
+#pass .srow label{font-size:12px;font-weight:600}
+#pass .srow output{font-size:12px;color:var(--mu);font-variant-numeric:tabular-nums}
+#pass .srow input[type=range]{grid-column:1/-1}
+/* result area: preview | checklist | downloads */
+#pass .outgrid{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,4fr) minmax(0,5fr);gap:16px;align-items:start}
+@media(max-width:820px){#pass .outgrid{grid-template-columns:minmax(0,1fr)}}
+#pass .finalbox{border:1px solid var(--ln);border-radius:4px;background:#fff;display:block;margin:0 auto;max-width:100%;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+#pass .finalbox canvas{display:block;width:100%;height:auto}
+#pass .checklist{list-style:none;margin:0;padding:0}
+#pass .checklist li{margin:0 0 8px}
+#pass .checklist label{display:flex;gap:8px;align-items:flex-start;font-size:13px;cursor:pointer;line-height:1.3}
+#pass .checklist input{margin-top:2px;width:18px;height:18px;accent-color:var(--ac);flex:0 0 auto}
+#pass .dlrow{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px}
+#pass .dlrow .abtn{flex:1 1 auto}
+#pass .sheetbox{border-top:1px solid var(--ln);padding-top:12px;margin-top:6px}
+#pass .peoplebox{margin:0 0 12px}
+#pass .peoplelist{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 6px}
+#pass .person{width:92px;border:1px solid var(--ln);border-radius:6px;background:var(--ch);padding:5px;text-align:center;font-size:11px}
+#pass .person img{display:block;width:100%;height:auto;background:#fff;border:1px solid var(--ln);border-radius:3px}
+#pass .person b{display:block;margin:4px 0 0;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#pass .person span{display:block;color:var(--mu)}
+#pass .person button{margin-top:4px;width:100%;min-height:28px;background:var(--p);color:var(--bad);border:1px solid var(--ln);border-radius:4px;font:inherit;font-size:11px;cursor:pointer}
+#pass .person button:hover{border-color:var(--bad)}
+#pass .twocol{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 8px}
+#pass .twocol label{display:block;font-size:12px;font-weight:600;margin:0 0 4px}
+#pass .anote{margin-top:12px;border-top:1px solid var(--ln);padding-top:10px;font-size:11.5px;color:var(--mu)}
+@media(max-width:640px){#pass .fsel,#pass .nin{font-size:16px}}
+</style>
+<script>
+(function () {
+'use strict';
+/* =========================================================================
+   PASSPORT PHOTO MAKER  -  runs 100% in the browser (HTML Canvas).
+   No upload, no API key, no server.
+
+   Map of this file (for beginners):
+     1. SETTINGS  - photo sizes, limits and print layout you can edit
+     2. PICTURE   - drawing the photo into the frame + brightness/contrast/sharpness
+     3. EDITOR    - drag / zoom, guides, background check
+     4. FILES     - open a photo, download the JPG, build the A4 print sheet (PDF or JPG)
+   ========================================================================= */
+
+/* ---------------- 1. SETTINGS ---------------- */
+var MAX_BYTES = 15 * 1024 * 1024;     // biggest file accepted (15 MB)
+var TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+var MAX_WORK_LONG = 4000;             // bigger photos are reduced to this (longest side, px)
+var MAX_SOURCE_PIXELS = 100000000;    // refuse absurd sizes that would crash the browser
+var DPI = 300;                        // resolution used to turn millimetres into pixels
+var EDIT_LONG = 640;                  // editor picture size (px, longest side). Smaller = faster dragging
+var JPG_QUALITY = 0.95;               // quality of the downloaded JPG (0 to 1)
+
+// A4 print sheet (all values in millimetres)
+var A4_W = 210, A4_H = 297;
+var PRINT_MARGIN = 10;                // empty border around the sheet (printers cannot print to the edge)
+var CAPTION_SPACE = 6;                // space kept free at the bottom for the small caption
+var GAP = 3;                          // space between photos
+var CUT_OFFSET = 0.35;                // the thin cut line is drawn this far outside each photo
+
+// Automatic background check (looks at the top-left and top-right corners)
+var BG_WHITE_MIN = 215;               // each colour must be at least this bright (0-255)
+var BG_SPREAD_MAX = 28;               // colours must be close to each other (no colour cast)
+var BG_STD_MAX = 24;                  // and the area must be plain (no pattern or objects)
+
+// Photo size presets.
+//   w, h    : size in mm
+//   px      : exact size of the digital photo in pixels
+//   head    : allowed head height (top of hair to chin) as a share of the photo height
+//   crown   : where the top of the head should be, as a share of the photo height from the top
+//   maxKB   : biggest file size (0 = no limit)
+var PRESETS = {
+  nepal: { label: 'Nepal Passport', w: 35, h: 45, px: [413, 531], head: [0.70, 0.80], crown: 0.067, maxKB: 0,
+           note: 'Plain white or very light grey background. Face centered and looking straight at the camera.' },
+  us:    { label: 'US Passport', w: 51, h: 51, px: [600, 600], head: [0.50, 0.69], crown: 0.12, maxKB: 240,
+           note: 'White or off-white background. Head 1 to 1 3/8 inch (25 to 35 mm). Digital photo: JPG under 240 KB.' }
+};
+var custom = { w: 35, h: 45, hmin: 70, hmax: 80 };
+
+/* ---------------- screen elements and state ---------------- */
+var $ = function (id) { return document.getElementById(id); };
+var el = {
+  drop: $('ppDrop'), pick: $('ppPick'), file: $('ppFile'), info: $('ppInfo'), msg: $('ppMsg'), msg2: $('ppMsg2'),
+  frame: $('ppFrame'), canvas: $('ppCanvas'), ph: $('ppPh'), guides: $('ppGuides'), busy: $('ppBusy'), busyTxt: $('ppBusyTxt'),
+  zoom: $('ppZoom'), zoomV: $('ppZoomV'), showG: $('ppShowGuides'), fit: $('ppFit'), bg: $('ppBg'),
+  preset: $('ppPreset'), custom: $('ppCustom'), w: $('ppW'), h: $('ppH'), hmin: $('ppHmin'), hmax: $('ppHmax'), spec: $('ppSpec'),
+  bright: $('ppBright'), contrast: $('ppContrast'), sharp: $('ppSharp'), adjReset: $('ppAdjReset'),
+  final: $('ppFinal'), finalBox: $('ppFinalBox'), finalCap: $('ppFinalCap'), list: $('ppChecklist'),
+  dlJpg: $('ppDlJpg'), jpgCap: $('ppJpgCap'), copies: $('ppCopies'), sheetFmt: $('ppSheetFmt'), dlSheet: $('ppDlSheet'), sheetCap: $('ppSheetCap'),
+  addPerson: $('ppAddPerson'), people: $('ppPeople'), peopleCap: $('ppPeopleCap')
+};
+if (!el.drop) return;
+var ectx = el.canvas.getContext('2d', { willReadFrequently: true });
+var fctx = el.final.getContext('2d');
+
+var work = null, levels = [], pw = 0, ph = 0;     // the photo and smaller copies of it
+var ready = false, busyCount = 0, busyTimer = null;
+var zoom = 1, ox = 0.5, oy = 0.5;                 // zoom (1 = photo just fills the frame) and photo centre inside the frame (0..1)
+var ew = 413, eh = 531, rafId = 0, lastBg = '';
+var guideEls = {};
+
+function say(box, text, kind) { box.textContent = text || ''; box.className = 'amsg' + (kind ? ' ' + kind : ''); }
+function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+function sizeText(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'; }
+function mk(w, h) { var c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+function toBlob(c, type, q) { return new Promise(function (res) { c.toBlob(res, type, q); }); }
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+function busyOn(text) {
+  busyCount++; el.busyTxt.textContent = text || 'Working...';
+  clearTimeout(busyTimer); busyTimer = setTimeout(function () { el.busy.classList.add('on'); }, 120);
+}
+function busyOff() { busyCount = Math.max(0, busyCount - 1); if (!busyCount) { clearTimeout(busyTimer); el.busy.classList.remove('on'); } }
+
+/* current photo size: preset, or the custom numbers */
+function getSpec() {
+  if (el.preset.value === 'custom') {
+    var hmin = custom.hmin / 100, hmax = custom.hmax / 100;
+    return { id: 'custom', label: 'Custom ' + custom.w + 'x' + custom.h + ' mm', w: custom.w, h: custom.h,
+             pxW: Math.round(custom.w / 25.4 * DPI), pxH: Math.round(custom.h / 25.4 * DPI),
+             hmin: hmin, hmax: hmax, crown: (1 - hmax) * 0.4, maxKB: 0, note: 'Check the exact rules of the office you are applying to.' };
+  }
+  var p = PRESETS[el.preset.value];
+  return { id: el.preset.value, label: p.label, w: p.w, h: p.h, pxW: p.px[0], pxH: p.px[1],
+           hmin: p.head[0], hmax: p.head[1], crown: p.crown, maxKB: p.maxKB, note: p.note };
+}
+
+/* ---------------- 2. PICTURE ---------------- */
+
+// Smaller copies of the photo (each half the size of the one before) give a cleaner result when the photo is shrunk a lot.
+function getLevel(l) {
+  while (levels.length <= l) {
+    var prev = levels[levels.length - 1], c = mk(Math.max(1, Math.round(prev.width / 2)), Math.max(1, Math.round(prev.height / 2)));
+    var cx = c.getContext('2d'); cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
+    cx.drawImage(prev, 0, 0, c.width, c.height); levels.push(c);
+  }
+  return levels[l];
+}
+
+// Draw the finished photo (white background + photo + adjustments) into a W x H canvas.
+// The same function makes the editor picture AND the exact-size download.
+function paint(ctx, W, H) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);                  // white behind everything (also fills transparent PNGs)
+  if (!work) return;
+  var cover = Math.max(W / pw, H / ph), s = cover * zoom, l = 0;     // s = canvas pixels per photo pixel
+  if (s < 1) l = Math.min(Math.floor(Math.log(1 / s) / Math.LN2), 8);
+  var src = getLevel(l), sl = s * pw / src.width;
+  ctx.save(); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.translate(ox * W, oy * H); ctx.scale(sl, sl);
+  ctx.drawImage(src, -src.width / 2, -src.height / 2);
+  ctx.restore();
+  adjust(ctx, W, H);
+}
+
+// Brightness, contrast and sharpness (simple per-pixel maths).
+function adjust(ctx, W, H) {
+  var b = +el.bright.value, c = +el.contrast.value, sh = +el.sharp.value;
+  if (!b && !c && !sh) return;
+  var id = ctx.getImageData(0, 0, W, H), d = id.data, i, v;
+  if (b || c) {
+    var f = 1 + c / 100, add = b * 1.5, lut = new Uint8ClampedArray(256);
+    for (v = 0; v < 256; v++) lut[v] = (v - 128) * f + 128 + add;
+    for (i = 0; i < d.length; i += 4) { d[i] = lut[d[i]]; d[i + 1] = lut[d[i + 1]]; d[i + 2] = lut[d[i + 2]]; }
+  }
+  if (sh > 0) {                                                       // 3x3 sharpening kernel [0 -a 0 / -a 1+4a -a / 0 -a 0]
+    var a = sh / 100 * 0.6, src = new Uint8ClampedArray(d), row = W * 4, x, y, ch, k;
+    for (y = 1; y < H - 1; y++) for (x = 1; x < W - 1; x++) {
+      k = y * row + x * 4;
+      for (ch = 0; ch < 3; ch++) d[k + ch] = src[k + ch] + a * (4 * src[k + ch] - src[k + ch - 4] - src[k + ch + 4] - src[k + ch - row] - src[k + ch + row]);
+    }
+  }
+  ctx.putImageData(id, 0, 0);
+}
+
+/* ---------------- 3. EDITOR ---------------- */
+
+function requestRender() { if (!rafId) rafId = requestAnimationFrame(function () { rafId = 0; render(); }); }
+function render() {
+  if (!ready) return;
+  paint(ectx, ew, eh);
+  fctx.drawImage(el.canvas, 0, 0);                                    // small "final photo" preview (no guides)
+  checkBackground();
+}
+
+// Keep the photo from being dragged completely out of the frame.
+function clampPos() {
+  var s = Math.max(ew / pw, eh / ph) * zoom, hw = pw * s / ew / 2, hh = ph * s / eh / 2;
+  ox = clamp(ox, 0.2 - hw, 0.8 + hw); oy = clamp(oy, 0.2 - hh, 0.8 + hh);
+}
+function zoomAt(z, px, py) {                                          // zoom around a point of the frame (px, py are 0..1)
+  z = clamp(z, 0.25, 4); var r = z / zoom;
+  ox = px + (ox - px) * r; oy = py + (oy - py) * r; zoom = z;
+  clampPos(); zoomUI(); requestRender();
+}
+function zoomUI() { el.zoom.value = Math.round(50 * Math.log(zoom) / Math.LN2); el.zoomV.textContent = Math.round(zoom * 100) + '%'; }
+function resetPosition() { zoom = 1; ox = 0.5; oy = 0.5; zoomUI(); requestRender(); }
+
+el.zoom.addEventListener('input', function () { zoomAt(Math.pow(2, +this.value / 50), 0.5, 0.5); });
+el.fit.addEventListener('click', function () { if (ready) resetPosition(); });
+el.showG.addEventListener('change', function () { el.guides.hidden = !(ready && el.showG.checked); });
+
+// Mouse / finger: one pointer moves the photo, two pointers pinch-zoom.
+var ptrs = {}, startMove = null, startPinch = null;
+function frameRect() { return el.frame.getBoundingClientRect(); }
+function pointerList() { return Object.keys(ptrs).map(function (k) { return ptrs[k]; }); }
+function beginGesture() {
+  var l = pointerList(), r = frameRect();
+  startMove = startPinch = null;
+  if (l.length === 1) startMove = { x: l[0].x, y: l[0].y, ox: ox, oy: oy };
+  else if (l.length >= 2) {
+    var dx = l[0].x - l[1].x, dy = l[0].y - l[1].y;
+    startPinch = { dist: Math.max(1, Math.hypot(dx, dy)), zoom: zoom, mx: (l[0].x + l[1].x) / 2, my: (l[0].y + l[1].y) / 2, ox: ox, oy: oy };
+  }
+  el.frame.classList.toggle('drag', l.length > 0);
+}
+el.frame.addEventListener('pointerdown', function (e) {
+  if (!ready) return;
+  ptrs[e.pointerId] = { x: e.clientX, y: e.clientY };
+  try { el.frame.setPointerCapture(e.pointerId); } catch (x) { }
+  beginGesture(); e.preventDefault();
+});
+el.frame.addEventListener('pointermove', function (e) {
+  if (!ptrs[e.pointerId]) return;
+  ptrs[e.pointerId] = { x: e.clientX, y: e.clientY };
+  var r = frameRect(); if (!r.width) return;
+  var l = pointerList();
+  if (startPinch && l.length >= 2) {
+    var dist = Math.hypot(l[0].x - l[1].x, l[0].y - l[1].y), mx = (l[0].x + l[1].x) / 2, my = (l[0].y + l[1].y) / 2;
+    ox = startPinch.ox + (mx - startPinch.mx) / r.width; oy = startPinch.oy + (my - startPinch.my) / r.height;
+    var z = clamp(startPinch.zoom * dist / startPinch.dist, 0.25, 4), ratio = z / zoom, px = (mx - r.left) / r.width, py = (my - r.top) / r.height;
+    ox = px + (ox - px) * ratio; oy = py + (oy - py) * ratio; zoom = z; clampPos(); zoomUI(); requestRender();
+  } else if (startMove) {
+    ox = startMove.ox + (e.clientX - startMove.x) / r.width; oy = startMove.oy + (e.clientY - startMove.y) / r.height;
+    clampPos(); requestRender();
+  }
+});
+function endPointer(e) { delete ptrs[e.pointerId]; beginGesture(); }
+['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function (n) { el.frame.addEventListener(n, endPointer); });
+el.frame.addEventListener('wheel', function (e) {                       // mouse wheel zoom
+  if (!ready) return; e.preventDefault();
+  var r = frameRect(); zoomAt(zoom * Math.pow(1.0015, -e.deltaY), (e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
+}, { passive: false });
+el.frame.addEventListener('keydown', function (e) {                     // keyboard: arrows move, + and - zoom
+  if (!ready) return; var st = 0.01, used = true;
+  if (e.key === 'ArrowLeft') ox -= st; else if (e.key === 'ArrowRight') ox += st;
+  else if (e.key === 'ArrowUp') oy -= st; else if (e.key === 'ArrowDown') oy += st;
+  else if (e.key === '+' || e.key === '=') { zoomAt(zoom * 1.05, 0.5, 0.5); e.preventDefault(); return; }
+  else if (e.key === '-') { zoomAt(zoom / 1.05, 0.5, 0.5); e.preventDefault(); return; }
+  else used = false;
+  if (used) { e.preventDefault(); clampPos(); requestRender(); }
+});
+
+/* guides drawn over the frame (they are never part of the downloaded photo) */
+function buildGuides() {
+  var g = el.guides;
+  function add(cls, parent) { var d = document.createElement('div'); d.className = cls; (parent || g).appendChild(d); return d; }
+  guideEls.safe = add('g-safe'); guideEls.center = add('g-center'); guideEls.chin = add('g-chin'); guideEls.crown = add('g-crown');
+  guideEls.oval = add('g-oval');
+  guideEls.lc = add('g-lbl'); guideEls.lc.style.background = '#e11d48'; guideEls.lc.textContent = 'Top of head';
+  guideEls.lh = add('g-lbl'); guideEls.lh.style.background = '#15803d'; guideEls.lh.textContent = 'Chin here';
+  guideEls.lb = add('g-lbl'); guideEls.lb.style.background = '#1d4ed8'; guideEls.lb.textContent = 'White background';
+}
+function updateGuides(S) {
+  var sx = 3 / S.w * 100, sy = 3 / S.h * 100, top = S.crown * 100, hm = (S.hmin + S.hmax) / 2;
+  guideEls.safe.style.cssText = 'left:' + sx + '%;right:' + sx + '%;top:' + sy + '%;bottom:' + sy + '%';
+  guideEls.crown.style.top = top + '%';
+  guideEls.chin.style.top = (S.crown + S.hmin) * 100 + '%'; guideEls.chin.style.height = (S.hmax - S.hmin) * 100 + '%';
+  var ovalW = 0.66 * hm * S.h / S.w * 100;                            // a head is about 0.66 times as wide as it is tall
+  guideEls.oval.style.cssText = 'top:' + top + '%;height:' + hm * 100 + '%;width:' + ovalW + '%;left:' + (50 - ovalW / 2) + '%';
+  guideEls.lc.style.cssText = 'background:#e11d48;left:4px;top:calc(' + top + '% + 4px)';
+  guideEls.lh.style.cssText = 'background:#15803d;left:4px;top:calc(' + (S.crown + S.hmin) * 100 + '% + 4px)';
+  guideEls.lb.style.cssText = 'background:#1d4ed8;right:4px;top:4px';
+}
+
+// Automatic background check: average colour of the two top corners.
+function checkBackground() {
+  var regions = [[0.02, 0.02, 0.16, 0.28], [0.82, 0.02, 0.16, 0.28]], n = 0, sr = 0, sg = 0, sb = 0, sl = 0, sl2 = 0, i;
+  regions.forEach(function (r) {
+    var x = Math.round(r[0] * ew), y = Math.round(r[1] * eh), w = Math.max(1, Math.round(r[2] * ew)), h = Math.max(1, Math.round(r[3] * eh));
+    var d = ectx.getImageData(x, y, w, h).data;
+    for (i = 0; i < d.length; i += 4) { var l = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; sr += d[i]; sg += d[i + 1]; sb += d[i + 2]; sl += l; sl2 += l * l; n++; }
+  });
+  var mr = sr / n, mg = sg / n, mb = sb / n, ml = sl / n, sd = Math.sqrt(Math.max(0, sl2 / n - ml * ml));
+  var lo = Math.min(mr, mg, mb), hi = Math.max(mr, mg, mb), ok = lo >= BG_WHITE_MIN && hi - lo <= BG_SPREAD_MAX && sd <= BG_STD_MAX;
+  var text = ok ? 'Background check: the top corners look plain white or very light. Good.'
+    : 'Background check: the top corners are not plain white (average colour rgb(' + Math.round(mr) + ', ' + Math.round(mg) + ', ' + Math.round(mb) + (sd > BG_STD_MAX ? ', not plain' : '') +
+      ')). Use a white wall, or remove the background first (AI Photoshop > Remove Background) and upload that PNG here.';
+  if (text !== lastBg) { lastBg = text; el.bg.textContent = text; el.bg.className = 'bgstat ' + (ok ? 'ok' : 'bad'); }
+}
+
+/* size / preset changes */
+function applySpec() {
+  var S = getSpec(), k = Math.min(1, EDIT_LONG / Math.max(S.pxW, S.pxH));
+  ew = Math.max(1, Math.round(S.pxW * k)); eh = Math.max(1, Math.round(S.pxH * k));
+  el.canvas.width = ew; el.canvas.height = eh; el.final.width = ew; el.final.height = eh;
+  el.frame.style.aspectRatio = S.w + ' / ' + S.h;
+  el.frame.style.width = 'min(100%, ' + (62 * S.w / S.h).toFixed(2) + 'vh)';
+  el.finalBox.style.aspectRatio = S.w + ' / ' + S.h;
+  el.custom.hidden = S.id !== 'custom';
+  updateGuides(S);
+  var head = Math.round(S.hmin * 100) + '-' + Math.round(S.hmax * 100) + '%';
+  el.spec.style.color = ''; el.spec.textContent = S.w + ' x ' + S.h + ' mm  |  digital file ' + S.pxW + ' x ' + S.pxH + ' px at ' + DPI + ' DPI  |  head height ' + head + ' of the photo. ' + S.note;
+  el.finalCap.textContent = 'Final photo (no guides): ' + S.w + ' x ' + S.h + ' mm';
+  el.jpgCap.textContent = 'JPG, exactly ' + S.pxW + ' x ' + S.pxH + ' px, ' + DPI + ' DPI' + (S.maxKB ? ', kept under ' + S.maxKB + ' KB' : '') + '.';
+  updateSheetCaption();
+  checkPeopleSize();
+  if (ready) { clampPos(); requestRender(); }
+}
+el.preset.addEventListener('change', applySpec);
+function readCustom() {
+  var w = parseFloat(el.w.value), h = parseFloat(el.h.value), a = parseFloat(el.hmin.value), b = parseFloat(el.hmax.value);
+  if (!(w >= 20 && w <= 100 && h >= 20 && h <= 100)) { setSpecError('Enter a width and a height between 20 and 100 mm.'); return; }
+  if (!(a >= 30 && b <= 95 && a < b)) { setSpecError('Head height: enter a minimum below the maximum (between 30 and 95 %).'); return; }
+  custom = { w: w, h: h, hmin: a, hmax: b }; applySpec();
+}
+function setSpecError(t) { el.spec.textContent = t; el.spec.style.color = 'var(--bad)'; }
+[el.w, el.h, el.hmin, el.hmax].forEach(function (i) { i.addEventListener('change', readCustom); });
+
+/* adjustments */
+[['bright', 'ppBrightV'], ['contrast', 'ppContrastV'], ['sharp', 'ppSharpV']].forEach(function (p) {
+  el[p[0]].addEventListener('input', function () { $(p[1]).textContent = this.value; requestRender(); });
+});
+el.adjReset.addEventListener('click', function () {
+  [['bright', 'ppBrightV'], ['contrast', 'ppContrastV'], ['sharp', 'ppSharpV']].forEach(function (p) { el[p[0]].value = 0; $(p[1]).textContent = '0'; });
+  requestRender();
+});
+
+/* ---------------- 4. FILES ---------------- */
+
+function problem(f) {
+  if (!f) return 'No image selected. Please choose a photo first.';
+  var okType = TYPES.indexOf(f.type) >= 0 || (!f.type && /\.(jpe?g|png|webp)$/i.test(f.name));
+  if (!okType) return 'Unsupported file type. Please use a JPG, PNG or WebP image.';
+  if (f.size === 0) return 'This file is empty. Please choose another photo.';
+  if (f.size > MAX_BYTES) return 'File too large (' + sizeText(f.size) + '). The maximum size is ' + sizeText(MAX_BYTES) + '.';
+  return '';
+}
+function loadFile(f) {
+  say(el.msg, '');
+  var p = problem(f);
+  if (p) { say(el.msg, p, 'err'); return; }
+  busyOn('Loading photo...');
+  var url = URL.createObjectURL(f), img = new Image();
+  img.onload = function () {
+    URL.revokeObjectURL(url);
+    try { start(img, f); } catch (e) { console.error(e); say(el.msg, 'Image processing failed. The photo may be too large for this browser. Try a smaller photo.', 'err'); }
+    busyOff();
+  };
+  img.onerror = function () { URL.revokeObjectURL(url); busyOff(); say(el.msg, 'This image could not be read. The file may be damaged. Please try another photo.', 'err'); };
+  img.src = url;
+}
+function start(img, f) {
+  var nw = img.naturalWidth, nh = img.naturalHeight;
+  if (!nw || !nh) { say(el.msg, 'This image could not be read. Please try another photo.', 'err'); return; }
+  if (nw * nh > MAX_SOURCE_PIXELS) { say(el.msg, 'The picture is too large (' + nw + ' x ' + nh + ' pixels). Please use a smaller photo.', 'err'); return; }
+  var k = Math.min(1, MAX_WORK_LONG / Math.max(nw, nh)), ww = Math.max(1, Math.round(nw * k)), wh = Math.max(1, Math.round(nh * k));
+  var c = mk(ww, wh), cx = c.getContext('2d'); cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
+  cx.drawImage(img, 0, 0, ww, wh);
+  work = c; pw = ww; ph = wh; levels = [c]; ready = true;
+  el.canvas.hidden = false; el.ph.hidden = true; el.guides.hidden = !el.showG.checked; el.zoom.disabled = false;
+  Array.prototype.forEach.call(el.list.querySelectorAll('input'), function (i) { i.checked = false; });   // new photo = check again
+  zoom = 1; ox = 0.5; oy = 0.5; zoomUI(); lastBg = '';
+  el.info.innerHTML = '';
+  var b = document.createElement('b'); b.textContent = f.name; el.info.appendChild(b);
+  el.info.appendChild(document.createTextNode(' (' + sizeText(f.size) + ', ' + nw + ' x ' + nh + ' px)'));
+  say(el.msg, 'Photo loaded. Drag it and zoom until your face fits the guides.', 'ok'); say(el.msg2, '');
+  render();
+}
+
+function saveBlob(blob, name) {
+  var a = document.createElement('a'), url = URL.createObjectURL(blob);
+  a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+}
+function unchecked() { return el.list.querySelectorAll('input:not(:checked)').length; }
+function doneMessage(text) {
+  var n = unchecked();
+  if (n) say(el.msg2, text + ' Note: ' + n + ' checklist item' + (n > 1 ? 's are' : ' is') + ' not ticked yet. Please check them before you submit the photo.', 'warn');
+  else say(el.msg2, text, 'ok');
+}
+
+// Put the resolution (300 DPI) into a JPG file. Canvas JPGs have no real DPI value.
+function setJpegDpi(buf, dpi) {
+  var b = new Uint8Array(buf);
+  if (b[0] !== 0xFF || b[1] !== 0xD8) return buf;
+  if (b[2] === 0xFF && b[3] === 0xE0 && b[6] === 0x4A && b[7] === 0x46 && b[8] === 0x49 && b[9] === 0x46) {   // JFIF header exists: change it
+    b[13] = 1; b[14] = dpi >> 8; b[15] = dpi & 255; b[16] = dpi >> 8; b[17] = dpi & 255; return b.buffer;
+  }
+  var seg = [0xFF, 0xE0, 0, 16, 0x4A, 0x46, 0x49, 0x46, 0, 1, 1, 1, dpi >> 8, dpi & 255, dpi >> 8, dpi & 255, 0, 0];   // no JFIF header: add one
+  var out = new Uint8Array(b.length + seg.length);
+  out.set(b.subarray(0, 2), 0); out.set(seg, 2); out.set(b.subarray(2), 2 + seg.length); return out.buffer;
+}
+async function jpegBytes(canvas, quality, maxKB) {
+  var q = quality, blob, buf;
+  for (var i = 0; i < 12; i++) {
+    blob = await toBlob(canvas, 'image/jpeg', q);
+    if (!blob) throw new Error('The browser could not create the JPG');
+    buf = setJpegDpi(await blob.arrayBuffer(), DPI);
+    if (!maxKB || buf.byteLength <= maxKB * 1024 || q <= 0.5) break;
+    q -= 0.05;                                                        // too big: lower the quality a little and try again
+  }
+  return { buf: buf, quality: q };
+}
+function exportCanvas(S) { var c = mk(S.pxW, S.pxH), cx = c.getContext('2d', { willReadFrequently: true }); paint(cx, S.pxW, S.pxH); return c; }
+
+/* --- Download Digital Photo: exact pixel size JPG --- */
+async function downloadDigital() {
+  if (!ready) { say(el.msg2, 'No image selected. Please choose a photo first.', 'err'); return; }
+  say(el.msg2, ''); busyOn('Creating your photo...'); el.dlJpg.disabled = true;
+  try {
+    await sleep(30);
+    var S = getSpec(), c = exportCanvas(S), r = await jpegBytes(c, JPG_QUALITY, S.maxKB);
+    c.width = 0;
+    var name = 'passport-photo-' + S.id + '-' + S.pxW + 'x' + S.pxH + '.jpg';
+    saveBlob(new Blob([r.buf], { type: 'image/jpeg' }), name);
+    doneMessage('Downloaded ' + name + ' (' + S.pxW + ' x ' + S.pxH + ' px, ' + sizeText(r.buf.byteLength) + ').');
+  } catch (e) { console.error(e); say(el.msg2, 'Image processing failed. Please try a smaller photo or another browser.', 'err'); }
+  finally { busyOff(); el.dlJpg.disabled = false; }
+}
+el.dlJpg.addEventListener('click', downloadDigital);
+
+/* --- A4 print sheet --- */
+// Work out how many photos fit on the sheet and where each one goes (millimetres from the top-left corner).
+/* People on the sheet. Each entry = one finished passport photo (a canvas at the exact pixel size) for one person. */
+var people = [], MAX_PEOPLE = 12;
+function specKey(S) { return S.id + ':' + S.w + 'x' + S.h + ':' + S.pxW + 'x' + S.pxH; }
+
+// Share N copies between P people as equally as possible. Example: 8 copies, 2 people -> 4+4; 4 people -> 2+2+2+2;
+// 3 people -> 3+3+2; 5 people -> 2+2+2+1+1. The extra copies go to the first people in the list.
+// Returns, for every place on the sheet, the number of the person whose photo goes there (people stay together).
+function shareCopies(n, P) {
+  var base = Math.floor(n / P), extra = n % P, out = [], counts = [];
+  for (var i = 0; i < P; i++) { var c = base + (i < extra ? 1 : 0); counts.push(c); for (var j = 0; j < c; j++) out.push(i); }
+  return { who: out, counts: counts };
+}
+
+// Work out how many photos fit on the sheet and where each one goes (millimetres from the top-left corner).
+function sheetLayout(w, h, copies) {
+  var uw = A4_W - 2 * PRINT_MARGIN, uh = A4_H - 2 * PRINT_MARGIN - CAPTION_SPACE;
+  var cols = Math.floor((uw + GAP) / (w + GAP)), rows = Math.floor((uh + GAP) / (h + GAP));
+  if (cols < 1 || rows < 1) return null;
+  var n = copies === 'max' ? cols * rows : Math.min(+copies, cols * rows);
+  var P = Math.max(1, people.length);
+  if (n < P) return { tooFew: true, n: n, people: P, maxFit: cols * rows };
+  var cu = Math.min(cols, n), ru = Math.ceil(n / cu), bw = cu * w + (cu - 1) * GAP, x0 = (A4_W - bw) / 2, pos = [];
+  var sh = shareCopies(n, P);
+  for (var i = 0; i < n; i++) pos.push({ x: x0 + (i % cu) * (w + GAP), y: PRINT_MARGIN + Math.floor(i / cu) * (h + GAP), who: sh.who[i] });
+  return { n: n, cols: cu, rows: ru, maxFit: cols * rows, pos: pos, counts: sh.counts };
+}
+function peopleText(L) {
+  if (!people.length) return '';
+  return ' ' + people.map(function (p, i) { return 'Person ' + (i + 1) + ': ' + L.counts[i]; }).join(', ') + '.';
+}
+function updateSheetCaption() {
+  var S = getSpec(), L = sheetLayout(S.w, S.h, el.copies.value);
+  if (!L) el.sheetCap.textContent = 'This photo size does not fit on an A4 sheet.';
+  else if (L.tooFew) el.sheetCap.textContent = 'You have ' + L.people + ' people but only ' + L.n + ' copies. Choose at least ' + L.people + ' copies so everyone gets a photo.';
+  else el.sheetCap.textContent = 'A4 (210 x 297 mm), ' + PRINT_MARGIN + ' mm margins: ' + L.n + ' photos (' + L.cols + ' x ' + L.rows + '; up to ' + L.maxFit + ' fit). Print at 100% / "Actual size".' + peopleText(L);
+}
+el.copies.addEventListener('change', updateSheetCaption);
+
+/* --- several people on one sheet --- */
+function renderPeople() {
+  el.people.textContent = '';
+  var S = getSpec(), L = sheetLayout(S.w, S.h, el.copies.value);
+  people.forEach(function (p, i) {
+    var d = document.createElement('div'); d.className = 'person';
+    var im = document.createElement('img'); im.src = p.thumb; im.alt = 'Photo of person ' + (i + 1);
+    var b = document.createElement('b'); b.textContent = 'Person ' + (i + 1); b.title = p.name;
+    var sp = document.createElement('span'); sp.textContent = L && !L.tooFew ? L.counts[i] + ' on sheet' : '';
+    var rm = document.createElement('button'); rm.type = 'button'; rm.textContent = 'Remove'; rm.setAttribute('aria-label', 'Remove person ' + (i + 1));
+    rm.addEventListener('click', function () { people.splice(i, 1); renderPeople(); });
+    d.appendChild(im); d.appendChild(b); d.appendChild(sp); d.appendChild(rm); el.people.appendChild(d);
+  });
+  el.addPerson.textContent = people.length ? '+ Add another person (' + people.length + ' added)' : '+ Add this photo to the print sheet';
+  updateSheetCaption();
+}
+// If the photo size changes, the photos already added no longer match: start the list again.
+function checkPeopleSize() {
+  if (!people.length) return;
+  var k = specKey(getSpec());
+  if (people.some(function (p) { return p.key !== k; })) { people = []; renderPeople(); say(el.msg2, 'The photo size changed, so the list of people for the print sheet was cleared. Please add the photos again.', 'warn'); }
+}
+el.addPerson.addEventListener('click', async function () {
+  if (!ready) { say(el.msg2, 'No image selected. Please choose a photo first.', 'err'); return; }
+  if (people.length >= MAX_PEOPLE) { say(el.msg2, 'You can add up to ' + MAX_PEOPLE + ' people on one sheet.', 'err'); return; }
+  say(el.msg2, ''); el.addPerson.disabled = true;
+  try {
+    var S = getSpec(), c = exportCanvas(S), t = mk(92 * 2, Math.round(92 * 2 * S.pxH / S.pxW)), tx = t.getContext('2d');
+    tx.imageSmoothingQuality = 'high'; tx.drawImage(c, 0, 0, t.width, t.height);
+    people.push({ canvas: c, thumb: t.toDataURL('image/jpeg', 0.8), name: (el.info.textContent || '').split(' (')[0] || 'photo', key: specKey(S) });
+    renderPeople();
+    say(el.msg2, 'Person ' + people.length + ' added to the print sheet. Load the next photo, or choose the number of copies and download the sheet.', 'ok');
+  } catch (e) { console.error(e); say(el.msg2, 'Image processing failed. Please try a smaller photo or another browser.', 'err'); }
+  finally { el.addPerson.disabled = false; }
+});
+
+// Build a small PDF file by hand: one A4 page, the photo stored once and placed several times, thin cut lines.
+function buildPdf(jpgs, imgW, imgH, S, L) {
+  var enc = new TextEncoder(), parts = [], offs = [], len = 0, k = 72 / 25.4, K = jpgs.length;
+  function push(u8) { parts.push(u8); len += u8.length; }
+  function str(s) { push(enc.encode(s)); }
+  function f(n) { return n.toFixed(3); }
+  var cap = S.label.replace(/[()\\]/g, '') + ' - ' + S.w + ' x ' + S.h + ' mm - ' + L.n + ' photos' + (K > 1 ? ' - ' + K + ' people' : '') + ' - print at 100% (Actual size), do not use Fit to page';
+  var c = '';
+  L.pos.forEach(function (p) { c += 'q ' + f(S.w * k) + ' 0 0 ' + f(S.h * k) + ' ' + f(p.x * k) + ' ' + f((A4_H - p.y - S.h) * k) + ' cm /Im' + p.who + ' Do Q\n'; });
+  c += '0.55 G 0.25 w\n';                                              // thin grey cut lines just outside each photo
+  L.pos.forEach(function (p) { c += f((p.x - CUT_OFFSET) * k) + ' ' + f((A4_H - p.y - S.h - CUT_OFFSET) * k) + ' ' + f((S.w + 2 * CUT_OFFSET) * k) + ' ' + f((S.h + 2 * CUT_OFFSET) * k) + ' re S\n'; });
+  c += 'BT /F1 7 Tf 0.35 g ' + f(PRINT_MARGIN * k) + ' ' + f((PRINT_MARGIN + 1) * k) + ' Td (' + cap + ') Tj ET\n';
+  function obj(n, body) { offs[n] = len; str(n + ' 0 obj\n' + body + '\nendobj\n'); }
+  // object numbers: 1 catalog, 2 pages, 3 page, 4 page content, 5 font, 6... one picture per person
+  var xo = ''; for (var i = 0; i < K; i++) xo += '/Im' + i + ' ' + (6 + i) + ' 0 R ';
+  push(new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E, 0x34, 0x0A, 0x25, 0xE2, 0xE3, 0xCF, 0xD3, 0x0A]));   // %PDF-1.4
+  obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  obj(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + f(A4_W * k) + ' ' + f(A4_H * k) + '] /Resources << /XObject << ' + xo + '>> /Font << /F1 5 0 R >> >> /Contents 4 0 R >>');
+  obj(4, '<< /Length ' + enc.encode(c).length + ' >>\nstream\n' + c + 'endstream');
+  obj(5, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
+  for (var j = 0; j < K; j++) {
+    offs[6 + j] = len;
+    str((6 + j) + ' 0 obj\n<< /Type /XObject /Subtype /Image /Width ' + imgW + ' /Height ' + imgH + ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ' + jpgs[j].length + ' >>\nstream\n');
+    push(jpgs[j]); str('\nendstream\nendobj\n');
+  }
+  var total = 6 + K, xref = len; str('xref\n0 ' + total + '\n0000000000 65535 f \n');
+  for (var n = 1; n < total; n++) str(('0000000000' + offs[n]).slice(-10) + ' 00000 n \n');
+  str('trailer\n<< /Size ' + total + ' /Root 1 0 R >>\nstartxref\n' + xref + '\n%%EOF\n');
+  var out = new Uint8Array(len), at = 0;
+  parts.forEach(function (p) { out.set(p, at); at += p.length; });
+  return out;
+}
+
+// The same sheet as a JPG picture (A4 at 300 DPI).
+async function buildSheetJpg(photos, S, L) {
+  var px = function (mm) { return mm / 25.4 * DPI; }, c = mk(Math.round(px(A4_W)), Math.round(px(A4_H))), cx = c.getContext('2d');
+  cx.fillStyle = '#fff'; cx.fillRect(0, 0, c.width, c.height);
+  cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
+  L.pos.forEach(function (p) { cx.drawImage(photos[p.who], px(p.x), px(p.y), px(S.w), px(S.h)); });
+  cx.strokeStyle = '#8c8c8c'; cx.lineWidth = Math.max(1, px(0.2));
+  L.pos.forEach(function (p) { cx.strokeRect(px(p.x - CUT_OFFSET), px(p.y - CUT_OFFSET), px(S.w + 2 * CUT_OFFSET), px(S.h + 2 * CUT_OFFSET)); });
+  cx.fillStyle = '#595959'; cx.font = Math.round(px(2.4)) + 'px Arial, sans-serif'; cx.textBaseline = 'alphabetic';
+  cx.fillText(S.label + ' - ' + S.w + ' x ' + S.h + ' mm - ' + L.n + ' photos - print at 100% (Actual size)', px(PRINT_MARGIN), c.height - px(PRINT_MARGIN));
+  var r = await jpegBytes(c, JPG_QUALITY, 0); c.width = 0; return r.buf;
+}
+
+async function downloadSheet() {
+  if (!ready && !people.length) { say(el.msg2, 'No image selected. Please choose a photo first.', 'err'); return; }
+  var S = getSpec();
+  if (people.some(function (p) { return p.key !== specKey(S); })) { checkPeopleSize(); return; }
+  var L = sheetLayout(S.w, S.h, el.copies.value);
+  if (!L) { say(el.msg2, 'This photo size does not fit on an A4 sheet.', 'err'); return; }
+  if (L.tooFew) { say(el.msg2, 'You have ' + L.people + ' people but only ' + L.n + ' copies on the sheet. Choose at least ' + L.people + ' copies.', 'err'); return; }
+  say(el.msg2, ''); busyOn('Creating print sheet...'); el.dlSheet.disabled = true;
+  var temp = null;
+  try {
+    await sleep(30);
+    // photos on the sheet: the people you added, or (if nobody was added) the photo on screen
+    var canvases = people.length ? people.map(function (p) { return p.canvas; }) : [temp = exportCanvas(S)];
+    var fmt = el.sheetFmt.value, name, blob, tag = L.n + 'x' + (canvases.length > 1 ? '-' + canvases.length + 'people' : '');
+    if (fmt === 'pdf') {
+      var jpgs = [];
+      for (var i = 0; i < canvases.length; i++) jpgs.push(new Uint8Array((await jpegBytes(canvases[i], JPG_QUALITY, 0)).buf));
+      blob = new Blob([buildPdf(jpgs, S.pxW, S.pxH, S, L)], { type: 'application/pdf' }); name = 'passport-sheet-A4-' + S.id + '-' + tag + '.pdf';
+    } else {
+      blob = new Blob([await buildSheetJpg(canvases, S, L)], { type: 'image/jpeg' }); name = 'passport-sheet-A4-' + S.id + '-' + tag + '.jpg';
+    }
+    if (temp) temp.width = 0;
+    saveBlob(blob, name);
+    var extra = canvases.length > 1 ? ' for ' + canvases.length + ' people (' + L.counts.join(' + ') + ')' : '';
+    doneMessage('Downloaded ' + name + ' (' + L.n + ' photos on A4' + extra + ', ' + sizeText(blob.size) + '). Print at 100% / Actual size.');
+  } catch (e) { console.error(e); say(el.msg2, 'Image processing failed. Please try fewer copies, a smaller photo or another browser.', 'err'); }
+  finally { busyOff(); el.dlSheet.disabled = false; }
+}
+el.dlSheet.addEventListener('click', downloadSheet);
+
+/* --- upload area --- */
+el.pick.addEventListener('click', function (e) { e.stopPropagation(); el.file.click(); });
+el.drop.addEventListener('click', function () { el.file.click(); });
+el.drop.addEventListener('keydown', function (e) { if ((e.key === 'Enter' || e.key === ' ') && e.target === el.drop) { e.preventDefault(); el.file.click(); } });
+el.file.addEventListener('change', function () { var f = el.file.files && el.file.files[0]; el.file.value = ''; if (f) loadFile(f); else say(el.msg, 'No image selected. Please choose a photo first.', 'err'); });
+['dragenter', 'dragover'].forEach(function (n) { el.drop.addEventListener(n, function (e) { e.preventDefault(); el.drop.classList.add('over'); }); });
+['dragleave', 'drop'].forEach(function (n) { el.drop.addEventListener(n, function (e) { e.preventDefault(); el.drop.classList.remove('over'); }); });
+el.drop.addEventListener('drop', function (e) { if (e.dataTransfer && e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]); });
+
+/* --- start --- */
+buildGuides();
+applySpec();
+})();
+</script>
 
 </main>
-<footer>&copy; Binjal Halwai NewsPortal. Unblur &amp; Enhance runs entirely in your browser. Remove Background sends the image to an online service, so avoid confidential images. Nothing on this page is investment advice.</footer>
+<footer>&copy; Binjal Halwai NewsPortal. Unblur &amp; Enhance runs entirely in your browser. Passport Photo also runs in your browser. Remove Background sends the image to an online service, so avoid confidential images. Nothing on this page is investment advice.</footer>
 <script>
 document.getElementById('bTheme').addEventListener('click',function(){
   var n=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';
