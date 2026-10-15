@@ -4384,6 +4384,7 @@ AI_PHOTOSHOP_BLOCK = r'''<style>
   <button type="button" class="aitool on" data-ait="bg" aria-pressed="true">Remove Background</button>
   <button type="button" class="aitool" data-ait="en" aria-pressed="false">Unblur &amp; Enhance</button>
   <button type="button" class="aitool" data-ait="pass" aria-pressed="false">Passport Photo</button>
+  <button type="button" class="aitool" data-ait="pdf" aria-pressed="false">PDF Tools</button>
  </div>
 <div id="aiToolBg">
  <div class="chead"><h2>Remove Image Background</h2>
@@ -4610,6 +4611,12 @@ AI_PHOTOSHOP_BLOCK = r'''<style>
    <div class="anote">Private: this tool runs entirely in your browser. Nothing is uploaded or stored. Rules can change: always confirm the current photo requirements with the passport office before you apply.</div>
  </div>
 </div>
+</div>
+<div id="aiToolPdf" hidden>
+ <div class="chead"><h2>PDF Tools</h2>
+  <p>Merge, split, organize, compress, convert, protect and edit PDF files. Everything runs in your browser: your files are never uploaded.</p></div>
+ <p id="pdfMsg" class="amsg err" hidden>PDF Tools could not load. Put the new ai-photoshop.html (the one that includes PDF Tools) next to nepse_news_hub.py, then restart or publish again.</p>
+ <iframe id="pdfFrame" title="PDF Tools" data-src="ai-photoshop.html?embed=1&amp;tool=pdf" style="display:block;width:100%;height:calc(100vh - 170px);min-height:560px;border:1px solid var(--ln);border-radius:8px;background:var(--bg)"></iframe>
 </div>
 </section>
 <script>
@@ -5131,6 +5138,8 @@ setPos(50);
     b.addEventListener('click', function () {
       btns.forEach(function (x) { var on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-pressed', on); });
       var bg = document.getElementById('aiToolBg'), en = document.getElementById('aiToolEn'), ps = document.getElementById('aiToolPass');
+      var pd = document.getElementById('aiToolPdf');
+      if (pd) { pd.hidden = b.dataset.ait !== 'pdf'; var fr = document.getElementById('pdfFrame'); if (fr && !pd.hidden && !fr.getAttribute('src')) fr.setAttribute('src', fr.getAttribute('data-src')); fr.onload = function () { try { if (!fr.contentDocument.getElementById('pdfToolsApp')) throw 0; } catch (e) { var m = document.getElementById('pdfMsg'); if (m) m.hidden = false; } }; }   // load PDF Tools on first open
       if (bg) bg.hidden = b.dataset.ait !== 'bg';
       if (en) en.hidden = b.dataset.ait !== 'en';
       if (ps) ps.hidden = b.dataset.ait !== 'pass';
@@ -5977,6 +5986,14 @@ def create_app(store: Store, engine: Engine, sched=None) -> FastAPI:
         return Response(data, media_type=media, headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
     stamp = lambda: datetime.now(NPT).strftime("%Y%m%d_%H%M")  # noqa: E731
+
+    @app.get("/ai-photoshop.html", response_class=HTMLResponse)
+    def ai_photoshop_page():
+        """Serve the standalone AI Photoshop page (it contains PDF Tools); the PDF Tools button on the dashboard loads it."""
+        f = Path(__file__).resolve().parent / "ai-photoshop.html"
+        if not f.is_file():
+            return HTMLResponse("<p style='font-family:Arial;padding:16px'>ai-photoshop.html was not found next to nepse_news_hub.py.</p>", status_code=404)
+        return HTMLResponse(f.read_text(encoding="utf-8"))
 
     @app.get("/", response_class=HTMLResponse)
     def index():
