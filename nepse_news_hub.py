@@ -21,6 +21,7 @@ COMMANDS
     verify-sources [--only ID ...] [--apply]        (--apply writes discovered feeds into sources.json)
     selftest
     init [--reset-sources] [--reset-keywords] [--reset-settings]
+    publish    (writes ./public_site/ : index.html + ai-photoshop.html + ai-lib/ + pdf-editor/ + .nojekyll)
 
 ENVIRONMENT (optional; a .env file next to this script is read automatically)
     NNH_HOST=127.0.0.1   NNH_PORT=8000   NNH_DATA_DIR=./data   NNH_DB=./data/nepse_news.db
@@ -28,6 +29,11 @@ ENVIRONMENT (optional; a .env file next to this script is read automatically)
     NNH_CONTACT=you@firm.com   (appended to the honest User-Agent)
     ANTHROPIC_API_KEY=...      (optional; enables labelled 30-60 word AI summaries)
     NNH_AI_MODEL=claude-haiku-4-5-20251001
+
+SITE FILES (next to this script; the live hub serves them and `publish` copies them)
+    ai-photoshop.html   standalone AI Photoshop page
+    ai-lib/             AI Enhance engine + model (Real-ESRGAN, onnxruntime-web)
+    pdf-editor/         PDF Editor (local-first, no server)
 
 DATA FILES (created on first run in ./data)
     sources.json   source registry (edit here or in the dashboard)
@@ -77,6 +83,7 @@ try:
     from bs4 import BeautifulSoup
     from fastapi import Body, Depends, FastAPI, HTTPException, Request
     from fastapi.responses import HTMLResponse, JSONResponse, Response
+    from fastapi.staticfiles import StaticFiles
 except ImportError as _e:  # pragma: no cover
     sys.stderr.write(f"Missing dependency: {_e}\nRun: pip install fastapi \"uvicorn[standard]\" httpx feedparser "
                      "beautifulsoup4 \"apscheduler>=3.10,<4\" openpyxl python-dateutil\n")
@@ -4363,6 +4370,9 @@ AI_PHOTOSHOP_BLOCK = r'''<style>
 #aiph .segb{background:var(--p);color:var(--tx);border:0;border-right:1px solid var(--ln);padding:6px 14px;min-height:34px;font:inherit;font-size:12px;font-weight:600;cursor:pointer}
 #aiph .segb:last-child{border-right:0}
 #aiph .segb.on{background:var(--ac);color:var(--onac)}
+#aiph #enModeBox{margin-bottom:12px}#aiph #enAiBox .seg2{margin:6px 0 10px}#aiph .aidesc{font-size:12px;color:var(--mu);margin:0 0 8px}
+#aiph #enAiBox progress{width:100%;height:10px;margin:8px 0 2px;accent-color:var(--ac)}#aiph .aistat{font-size:12px;color:var(--mu);min-height:1.2em}
+#aiph .seg2[hidden],#aiph #enModeBox[hidden],#aiph #enAiBox[hidden],#aiph #enQuickBox[hidden],#aiph #enScaleBox[hidden],#aiph #enAiBox progress[hidden],#aiph #enAiBox .abtn[hidden]{display:none}
 #aiph .fsel{width:100%;background:var(--p);color:var(--tx);border:1px solid var(--ln);border-radius:6px;padding:6px 10px;min-height:38px;font:inherit;margin:0 0 10px}
 #aiph .cmpwrap{display:flex;justify-content:center}
 #aiph .cmpbox{position:relative;width:100%;aspect-ratio:4/3;border:1px solid var(--ln);border-radius:8px;overflow:hidden;background:var(--ch);touch-action:pan-y;user-select:none;-webkit-user-select:none;cursor:ew-resize}
@@ -4385,6 +4395,7 @@ AI_PHOTOSHOP_BLOCK = r'''<style>
   <button type="button" class="aitool" data-ait="en" aria-pressed="false">Unblur &amp; Enhance</button>
   <button type="button" class="aitool" data-ait="pass" aria-pressed="false">Passport Photo</button>
   <button type="button" class="aitool" data-ait="pdf" aria-pressed="false">PDF Tools</button>
+  <button type="button" class="aitool" data-ait="pdfed" aria-pressed="false">PDF Editor</button>
  </div>
 <div id="aiToolBg">
  <div class="chead"><h2>Remove Image Background</h2>
@@ -4456,6 +4467,28 @@ AI_PHOTOSHOP_BLOCK = r'''<style>
   </div>
 
   <div class="cc en-ctl">
+   <div id="enModeBox" hidden>
+    <h3>Method</h3>
+    <div class="seg2 enmode" role="group" aria-label="Enhance method">
+     <button type="button" class="segb on" data-enmode="quick" aria-pressed="true">Quick</button>
+     <button type="button" class="segb" data-enmode="ai" aria-pressed="false">AI Enhance (free)</button>
+    </div>
+   </div>
+   <div id="enAiBox" hidden>
+    <h3>2. AI Enhance</h3>
+    <p class="aidesc">A free AI model cleans noise and compression blocks and rebuilds sharp edges. It runs on your own device, so the photo is never uploaded. Made for small or blurry photos up to about 0.6 megapixels (for example 700 x 850 px). It may take up to a minute.</p>
+    <div class="seg2" role="group" aria-label="AI output size" id="enAiScaleRow">
+     <button type="button" class="segb" data-aiscale="1" aria-pressed="false">Same size</button>
+     <button type="button" class="segb on" data-aiscale="2" aria-pressed="true">2x</button>
+     <button type="button" class="segb" data-aiscale="4" aria-pressed="false">4x</button>
+    </div>
+    <div class="srow"><label for="enAiStr">AI strength</label><output id="enAiStrV" for="enAiStr">100</output><input type="range" id="enAiStr" min="0" max="100" value="100"></div>
+    <div class="aact"><button type="button" class="abtn" id="enAiGo">Enhance with AI</button> <button type="button" class="abtn ghost" id="enAiStop" hidden>Cancel</button></div>
+    <progress id="enAiProg" max="100" value="0" hidden></progress>
+    <div class="aistat" id="enAiStat" role="status" aria-live="polite"></div>
+    <div class="anote">The first run downloads the AI engine (about 19 MB). Your browser keeps it for next time. Only the engine is downloaded, never your photo.</div>
+   </div>
+   <div id="enQuickBox">
    <h3>2. Presets</h3>
    <div class="chips" role="group" aria-label="Presets">
     <button type="button" class="chip" data-preset="auto">Auto Enhance</button>
@@ -4471,19 +4504,20 @@ AI_PHOTOSHOP_BLOCK = r'''<style>
    <div class="srow"><label for="enContrast">Contrast</label><output id="enContrastV" for="enContrast">0</output><input type="range" id="enContrast" min="-100" max="100" value="0" disabled></div>
    <div class="srow"><label for="enSat">Saturation</label><output id="enSatV" for="enSat">0</output><input type="range" id="enSat" min="-100" max="100" value="0" disabled></div>
    <div class="srow"><label for="enDenoise">Denoise / smoothing</label><output id="enDenoiseV" for="enDenoise">0</output><input type="range" id="enDenoise" min="0" max="100" value="0" disabled></div>
+   </div>
    <h3 style="margin-top:14px">4. Size and download</h3>
-   <div class="seg2" role="group" aria-label="Image scale">
+   <div id="enScaleBox"><div class="seg2" role="group" aria-label="Image scale">
     <button type="button" class="segb on" data-scale="1" aria-pressed="true">Original</button>
     <button type="button" class="segb" data-scale="1.5" aria-pressed="false">1.5x</button>
     <button type="button" class="segb" data-scale="2" aria-pressed="false">2x</button>
-   </div>
+   </div></div>
    <select id="enFmt" class="fsel" aria-label="Download format">
     <option value="png">PNG (best quality)</option>
     <option value="jpg">JPG (smaller file)</option>
    </select>
    <div class="aact"><button type="button" class="abtn" id="enDl">Download Enhanced Image</button></div>
    <div class="encap" id="enSize"></div>
-   <div class="anote">Private: this tool runs entirely in your browser. Nothing is uploaded or stored.</div>
+   <div class="anote" id="enNote">Private: this tool runs entirely in your browser. Nothing is uploaded or stored.</div>
   </div>
  </div>
 </div>
@@ -4618,6 +4652,12 @@ AI_PHOTOSHOP_BLOCK = r'''<style>
  <p id="pdfMsg" class="amsg err" hidden>PDF Tools could not start in this browser. Please update your browser (Chrome, Edge, Firefox or Safari 16.4 or newer).</p>
  <iframe id="pdfFrame" title="PDF Tools" style="display:block;width:100%;height:calc(100vh - 170px);min-height:560px;border:1px solid var(--ln);border-radius:8px;background:var(--bg)"></iframe>
  <script type="text/plain" id="pdfToolsGz">__PDFGZ__</script>
+</div>
+<div id="aiToolPdfEd" hidden>
+ <div class="chead"><h2>PDF Editor</h2>
+  <p>Edit text, sign, fill forms, redact, annotate, reorder pages and run OCR (English, Nepali, Hindi). Everything runs in your browser: your files are never uploaded. <a href="pdf-editor/" target="_blank" rel="noopener">Open the PDF Editor in a full page</a></p></div>
+ <p id="pdfEdMsg" class="amsg err" hidden></p>
+ <iframe id="pdfEdFrame" title="PDF Editor" style="display:block;width:100%;height:calc(100vh - 170px);min-height:620px;border:1px solid var(--ln);border-radius:8px;background:var(--bg)"></iframe>
 </div>
 </section>
 <script>
@@ -4769,6 +4809,10 @@ var MAX_LONG_SIDE = 6000;                    // very large photos are reduced to
 var MAX_OUTPUT_PIXELS = 16000000;            // output limit: phones cannot make bigger canvases
 var MAX_SOURCE_PIXELS = 100000000;           // refuse absurd sizes that would crash the browser
 var JPG_QUALITY = 0.95;                      // JPG download quality (0 to 1)
+var AI_LIB = 'ai-lib/';                      // folder with the AI engine files (upload it next to this page)
+var AI_MODEL = 'realesr-general-x4v3.onnx';  // Real-ESRGAN compact photo model (BSD-3-Clause)
+var AI_MAX_PIXELS = 600000;                  // biggest photo the AI accepts (0.6 megapixels)
+var AI_TILE = 128, AI_PAD = 16;              // the photo is processed in small tiles so the page stays responsive
 var LIVE_DELAY = 150;                        // wait (ms) after a slider moves before re-processing
 
 // Slider values (all start at 0). Meaning of each:
@@ -4994,7 +5038,7 @@ function start(img, f) {
   bctx.imageSmoothingQuality = 'high'; bctx.drawImage(c, 0, 0, pw, ph);
   baseData = bctx.getImageData(0, 0, pw, ph);
   actx.putImageData(baseData, 0, 0);
-  work = c; fileName = f.name.replace(/\.[^.]+$/, '').replace(/[^\w\-]+/g, '_') || 'photo'; ready = true;
+  work = c; fileName = f.name.replace(/\.[^.]+$/, '').replace(/[^\w\-]+/g, '_') || 'photo'; ready = true; clearAi(); aiStatus(''); aiProgress(null);
 
   var ratio = pw / ph;                                   // fit the comparison box to the photo
   el.box.style.aspectRatio = pw + ' / ' + ph;
@@ -5007,7 +5051,7 @@ function start(img, f) {
   var b = document.createElement('b'); b.textContent = f.name;
   el.info.appendChild(b);
   el.info.appendChild(document.createTextNode(' (' + sizeText(f.size) + ', ' + nw + ' x ' + nh + ' px)' + (k < 1 ? ' - reduced to ' + ww + ' x ' + wh + ' for processing' : '')));
-  say('Photo loaded. Pick a preset or move a slider.', 'ok');
+  say(enMode === 'ai' ? 'Photo loaded. Press "Enhance with AI".' : 'Photo loaded. Pick a preset or move a slider.', 'ok'); if (enMode === 'ai') el.size.textContent = '';
 }
 
 /* --- sliders --- */
@@ -5084,6 +5128,7 @@ el.box.addEventListener('pointermove', function (e) { if (dragging) moveFrom(e);
 /* --- download the full-size result --- */
 async function download() {
   if (!ready) { say('No image selected. Please choose a photo first.', 'err'); return; }
+  if (enMode === 'ai') { return downloadAi(); }
   while (working) await sleep(30);                                    // wait for a running preview
   working = true; clearTimeout(liveTimer); say(''); busyOn('Creating full-size image...', true); el.dl.disabled = true;
   var c = null;
@@ -5118,6 +5163,129 @@ async function download() {
   }
 }
 
+/* ---------- AI Enhance (free): a small AI model that runs on your own device (onnxruntime-web, WebAssembly) ---------- */
+var enMode = 'quick', aiScale = 2, aiStrength = 100, aiBig = null, aiSrc = null, aiOut = null, aiSession = null, aiRunning = false, aiCancel = false, aiChecked = false;
+var AI_BYTES = { 'ort-wasm-simd-threaded.wasm': 14239897 };   // used only for the download progress bar
+var ai = { box: $('enModeBox'), panel: $('enAiBox'), quick: $('enQuickBox'), scaleBox: $('enScaleBox'), go: $('enAiGo'), stop: $('enAiStop'), prog: $('enAiProg'), stat: $('enAiStat'), str: $('enAiStr'), strV: $('enAiStrV'), note: $('enNote') };
+function aiPath(name) { return new URL(AI_LIB + name, document.baseURI).href; }
+function tick() { return new Promise(function (r) { setTimeout(r, 0); }); }
+function clearAi() { aiBig = aiSrc = aiOut = null; }
+function aiStatus(t) { ai.stat.textContent = t || ''; }
+function aiProgress(p) { if (p === null) { ai.prog.hidden = true; return; } ai.prog.hidden = false; ai.prog.value = p; }
+async function aiFetch(name, label, total) {
+  var res = await fetch(aiPath(name)); if (!res.ok) throw new Error('missing');
+  total = total || +res.headers.get('content-length') || 1;
+  var reader = res.body && res.body.getReader ? res.body.getReader() : null; if (!reader) return new Uint8Array(await res.arrayBuffer());
+  var chunks = [], got = 0, r;
+  for (;;) { r = await reader.read(); if (r.done) break; chunks.push(r.value); got += r.value.length; aiProgress(Math.min(99, Math.round(got / total * 100))); aiStatus(label + ' ' + (got / 1048576).toFixed(1) + ' MB'); }
+  var out = new Uint8Array(got), o = 0; chunks.forEach(function (c) { out.set(c, o); o += c.length; }); return out;
+}
+async function aiEngine() {
+  if (aiSession) return aiSession;
+  if (!window.ort) await new Promise(function (ok, bad) { var s = document.createElement('script'); s.src = aiPath('ort.wasm.min.js'); s.onload = ok; s.onerror = function () { bad(new Error('missing')); }; document.head.appendChild(s); });
+  ort.env.wasm.wasmPaths = aiPath(''); ort.env.wasm.numThreads = 1; ort.env.wasm.proxy = true;   // proxy = the AI runs in a background worker, so the page stays responsive (GitHub pages cannot use extra threads)
+  ort.env.wasm.wasmBinary = await aiFetch('ort-wasm-simd-threaded.wasm', 'Downloading the AI engine:', AI_BYTES['ort-wasm-simd-threaded.wasm']);
+  var model = await aiFetch(AI_MODEL, 'Downloading the AI model:', 0);
+  aiStatus('Starting the AI engine...'); aiProgress(null); await tick();
+  aiSession = await ort.InferenceSession.create(model, { executionProviders: ['wasm'], graphOptimizationLevel: 'all' });
+  return aiSession;
+}
+/* run the model over the photo tile by tile: returns the 4x enlarged picture as RGBA bytes */
+async function aiRunTiles(sess, src, w, h) {
+  var W4 = w * 4, H4 = h * 4, out = new Uint8ClampedArray(W4 * H4 * 4), tiles = [], tx, ty, x, y, k;
+  for (ty = 0; ty < h; ty += AI_TILE) for (tx = 0; tx < w; tx += AI_TILE) tiles.push([tx, ty]);
+  var n = tiles.length, t0 = performance.now();
+  for (k = 0; k < n; k++) {
+    if (aiCancel) throw new Error('cancel');
+    tx = tiles[k][0]; ty = tiles[k][1];
+    var x0 = Math.max(0, tx - AI_PAD), y0 = Math.max(0, ty - AI_PAD), x1 = Math.min(w, tx + AI_TILE + AI_PAD), y1 = Math.min(h, ty + AI_TILE + AI_PAD), tw = x1 - x0, th = y1 - y0;
+    var inp = new Float32Array(3 * tw * th), plane = tw * th, p = 0, q;
+    for (y = y0; y < y1; y++) for (x = x0; x < x1; x++, p++) { q = (y * w + x) * 4; inp[p] = src[q] / 255; inp[plane + p] = src[q + 1] / 255; inp[2 * plane + p] = src[q + 2] / 255; }
+    var res = await sess.run({ input: new ort.Tensor('float32', inp, [1, 3, th, tw]) }), o = res.output.data, ow = tw * 4, oplane = ow * th * 4;
+    var cx0 = (tx - x0) * 4, cy0 = (ty - y0) * 4, cw = Math.min(AI_TILE, w - tx) * 4, ch = Math.min(AI_TILE, h - ty) * 4, di, si;
+    for (y = 0; y < ch; y++) { di = ((ty * 4 + y) * W4 + tx * 4) * 4; si = (cy0 + y) * ow + cx0;
+      for (x = 0; x < cw; x++, di += 4, si++) { out[di] = o[si] * 255; out[di + 1] = o[oplane + si] * 255; out[di + 2] = o[2 * oplane + si] * 255; out[di + 3] = 255; } }
+    if (res.output.dispose) res.output.dispose();
+    var done = k + 1, eta = Math.round((performance.now() - t0) / 1000 / done * (n - done));
+    aiProgress(Math.round(done / n * 100)); aiStatus('Enhancing... ' + Math.round(done / n * 100) + '%' + (done < n ? ' (about ' + eta + ' s left)' : ''));
+    await tick();
+  }
+  return out;
+}
+function aiShrink(c, tw, th) {          // shrink in steps of at most 2x so the result stays smooth
+  var cur = c;
+  while (cur.width / 2 >= tw && cur.height / 2 >= th) {
+    var n = document.createElement('canvas'); n.width = Math.max(1, Math.round(cur.width / 2)); n.height = Math.max(1, Math.round(cur.height / 2));
+    var g = n.getContext('2d'); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high'; g.drawImage(cur, 0, 0, n.width, n.height); cur = n;
+  }
+  return cur;
+}
+function aiCompose() {                  // mix the AI picture with the plainly enlarged photo, at the chosen size
+  var tw = Math.max(1, Math.round(aiSrc.width * aiScale)), th = Math.max(1, Math.round(aiSrc.height * aiScale));
+  var c = document.createElement('canvas'); c.width = tw; c.height = th; var g = c.getContext('2d'); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+  if (aiStrength < 100) g.drawImage(aiSrc, 0, 0, tw, th);
+  g.globalAlpha = aiStrength / 100; g.drawImage(aiShrink(aiBig, tw, th), 0, 0, tw, th); g.globalAlpha = 1;
+  aiOut = c; showAi(); el.size.textContent = 'Download size: ' + tw + ' x ' + th + ' px';
+}
+function showAi() { actx.clearRect(0, 0, el.after.width, el.after.height); actx.imageSmoothingEnabled = true; actx.imageSmoothingQuality = 'high'; actx.drawImage(aiOut, 0, 0, el.after.width, el.after.height); }
+function setEnMode(m) {
+  enMode = m;
+  document.querySelectorAll('#aiph [data-enmode]').forEach(function (b) { var on = b.dataset.enmode === m; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
+  ai.quick.hidden = m === 'ai'; ai.panel.hidden = m !== 'ai'; ai.scaleBox.hidden = m === 'ai';
+  ai.note.textContent = m === 'ai' ? 'AI Enhance runs on your device. Your photo is never uploaded.' : 'Private: this tool runs entirely in your browser. Nothing is uploaded or stored.';
+  say('');
+  if (!ready) { showSize(); return; }
+  if (m === 'ai') { if (aiOut) { showAi(); el.size.textContent = 'Download size: ' + aiOut.width + ' x ' + aiOut.height + ' px'; } else { actx.putImageData(baseData, 0, 0); el.size.textContent = ''; say('Press "Enhance with AI" to process this photo.'); } }
+  else { runPreview(); showSize(); }
+}
+async function runAi() {
+  if (aiRunning) return;
+  if (!ready) { say('No image selected. Please choose a photo first.', 'err'); return; }
+  var w = work.width, h = work.height;
+  if (w * h > AI_MAX_PIXELS) { say('This photo is ' + (w * h / 1e6).toFixed(1) + ' megapixels (' + w + ' x ' + h + ' px). AI Enhance runs on your device and is made for small or blurry photos up to ' + (AI_MAX_PIXELS / 1e6).toFixed(1) + ' megapixels (about 700 x 850 px). Use Quick mode for bigger photos, or make the photo smaller first.', 'err'); return; }
+  aiRunning = true; aiCancel = false; ai.go.disabled = true; ai.stop.hidden = false; say(''); aiStatus(''); aiProgress(0);
+  try {
+    var sess = await aiEngine();
+    var sc = document.createElement('canvas'); sc.width = w; sc.height = h; var sx = sc.getContext('2d'); sx.fillStyle = '#fff'; sx.fillRect(0, 0, w, h); sx.drawImage(work, 0, 0);
+    var bytes = await aiRunTiles(sess, sx.getImageData(0, 0, w, h).data, w, h);
+    var big = document.createElement('canvas'); big.width = w * 4; big.height = h * 4; big.getContext('2d').putImageData(new ImageData(bytes, w * 4, h * 4), 0, 0);
+    aiSrc = sc; aiBig = big; aiCompose(); setPos(50);
+    say('Done. The AI-enhanced photo is ' + aiOut.width + ' x ' + aiOut.height + ' px. Drag the line to compare, change the size or strength, then download.', 'ok'); aiStatus('');
+  } catch (e) {
+    var m = e && e.message;
+    if (m === 'cancel') say('Cancelled.', ''); else if (m === 'missing') say('AI Enhance could not start because its files are not available on this website. Quick mode still works.', 'err');
+    else say('AI Enhance could not finish on this device (it may be low on memory). Try a smaller photo, or use Quick mode.', 'err');
+    aiStatus('');
+  } finally { aiRunning = false; ai.go.disabled = false; ai.stop.hidden = true; aiProgress(null); }
+}
+async function downloadAi() {
+  if (!aiOut) { say('Run "Enhance with AI" first, then download the result.', 'err'); return; }
+  var jpg = el.fmt.value === 'jpg', c = aiOut;
+  if (jpg) { c = document.createElement('canvas'); c.width = aiOut.width; c.height = aiOut.height; var g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(aiOut, 0, 0); }
+  var blob = await new Promise(function (res) { c.toBlob(res, jpg ? 'image/jpeg' : 'image/png', JPG_QUALITY); });
+  if (!blob) { say('The browser could not create the file. Try PNG instead.', 'err'); return; }
+  var a = document.createElement('a'), url = URL.createObjectURL(blob);
+  a.href = url; a.download = fileName + '-ai-enhanced.' + (jpg ? 'jpg' : 'png'); document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+  say('Downloaded ' + a.download + ' (' + aiOut.width + ' x ' + aiOut.height + ' px, ' + sizeText(blob.size) + ').', 'ok');
+}
+document.querySelectorAll('#aiph [data-enmode]').forEach(function (b) { b.addEventListener('click', function () { setEnMode(b.dataset.enmode); }); });
+document.querySelectorAll('#aiph [data-aiscale]').forEach(function (b) { b.addEventListener('click', function () {
+  aiScale = +b.dataset.aiscale;
+  document.querySelectorAll('#aiph [data-aiscale]').forEach(function (x) { var on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-pressed', on); });
+  if (aiBig && !aiRunning) aiCompose();
+}); });
+ai.str.addEventListener('input', function () { aiStrength = +ai.str.value; ai.strV.textContent = ai.str.value; if (aiBig && !aiRunning) aiCompose(); });
+ai.go.addEventListener('click', runAi);
+ai.stop.addEventListener('click', function () { aiCancel = true; aiStatus('Cancelling...'); });
+/* the AI choice appears only when the engine files are really on this website (checked once, when the tool is opened) */
+async function aiCheck() {
+  if (aiChecked) return; aiChecked = true;
+  if (location.protocol === 'file:') { ai.box.hidden = true; return; }      // opened from a local file: browsers block loading the engine
+  try { var r = await fetch(aiPath(AI_MODEL), { method: 'HEAD' }); ai.box.hidden = !r.ok; } catch (e) { ai.box.hidden = true; }
+}
+var enTool = document.querySelector('#aiph .aitool[data-ait="en"]'); if (enTool) enTool.addEventListener('click', aiCheck);
+
 /* --- wire up the upload area and buttons --- */
 el.pick.addEventListener('click', function (e) { e.stopPropagation(); el.file.click(); });
 el.drop.addEventListener('click', function () { el.file.click(); });
@@ -5140,11 +5308,29 @@ setPos(50);
       btns.forEach(function (x) { var on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-pressed', on); });
       var bg = document.getElementById('aiToolBg'), en = document.getElementById('aiToolEn'), ps = document.getElementById('aiToolPass');
       var pd = document.getElementById('aiToolPdf');
+      var pe = document.getElementById('aiToolPdfEd'); if (pe) pe.hidden = b.dataset.ait !== 'pdfed';   // PDF Editor panel
       if (pd) { pd.hidden = b.dataset.ait !== 'pdf'; if (!pd.hidden && window.pdfOpen) window.pdfOpen(''); }   // PDF Tools loads on first open
       if (bg) bg.hidden = b.dataset.ait !== 'bg';
       if (en) en.hidden = b.dataset.ait !== 'en';
       if (ps) ps.hidden = b.dataset.ait !== 'pass';
     });
+  });
+})();
+</script>
+<script>
+/* PDF Editor: a separate folder (pdf-editor/) on the same website. It is loaded into its panel only when the PDF Editor button is pressed. */
+(function () {
+  var btn = document.querySelector('#aiph [data-ait="pdfed"]'), frame = document.getElementById('pdfEdFrame'), msg = document.getElementById('pdfEdMsg');
+  if (!btn || !frame || !msg) return;
+  var busy = false;
+  function fail(t) { msg.textContent = t; msg.hidden = false; }
+  btn.addEventListener('click', async function () {
+    if (busy || frame.getAttribute('src')) return;
+    busy = true; msg.hidden = true;
+    if (location.protocol === 'file:') { fail('The PDF Editor cannot start from a file on your computer. Open it from the website or from the NEPSE News Hub (python nepse_news_hub.py), or double-click pdf-editor/PDF-Editor-Local.html.'); busy = false; return; }
+    try { var r = await fetch('pdf-editor/index.html', { method: 'HEAD' }); if (!r.ok) throw new Error('missing'); frame.setAttribute('src', 'pdf-editor/'); }
+    catch (e) { fail('The PDF Editor files were not found on this website. Upload the pdf-editor folder next to this page.'); }
+    busy = false;
   });
 })();
 </script>
@@ -6008,7 +6194,8 @@ def create_app(store: Store, engine: Engine, sched=None) -> FastAPI:
         resp = await call_next(request)
         resp.headers.setdefault("X-Content-Type-Options", "nosniff")
         resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-        resp.headers.setdefault("X-Frame-Options", "DENY")
+        # the PDF Editor (pdf-editor/) is shown inside the AI Photoshop tab, so only that folder may be framed (same origin)
+        resp.headers.setdefault("X-Frame-Options", "SAMEORIGIN" if request.url.path.startswith("/pdf-editor/") else "DENY")
         return resp
 
     def admin(request: Request):
@@ -6022,6 +6209,16 @@ def create_app(store: Store, engine: Engine, sched=None) -> FastAPI:
         return Response(data, media_type=media, headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
     stamp = lambda: datetime.now(NPT).strftime("%Y%m%d_%H%M")  # noqa: E731
+
+    # ---- site assets used by AI Photoshop (v1.4): ai-lib/ = AI Enhance engine + model, pdf-editor/ = PDF Editor ----
+    # Same folders that `publish` copies to the public site, so the live hub and GitHub Pages behave the same.
+    import mimetypes
+    for _ext, _mt in ((".js", "text/javascript"), (".mjs", "text/javascript"), (".wasm", "application/wasm"), (".css", "text/css")):
+        mimetypes.add_type(_mt, _ext)       # Windows registry entries can be wrong, and nosniff blocks wrongly typed scripts
+    for _name, _with_index in (("ai-lib", False), ("pdf-editor", True)):
+        _dir = Path(__file__).resolve().parent / _name
+        if _dir.is_dir():
+            app.mount("/" + _name, StaticFiles(directory=str(_dir), html=_with_index), name=_name)
 
     @app.get("/ai-photoshop.html", response_class=HTMLResponse)
     def ai_photoshop_page():
@@ -6515,18 +6712,40 @@ def cmd_collect(args):
 
 
 def cmd_publish(args):
-    """Write a public, static site (headlines + links only) to ./public_site/index.html"""
+    """Write the public static site to ./public_site/ : index.html (headlines + links only), ai-photoshop.html,
+    ai-lib/ (AI Enhance), pdf-editor/ (PDF Editor) and .nojekyll. Upload the CONTENT of public_site/ to GitHub Pages."""
     store = Store(CFG.data_dir)
     init_db()
     html_doc = build_snapshot({}, store.settings())
-    out = Path(__file__).resolve().parent / "public_site"
+    here = Path(__file__).resolve().parent
+    out = here / "public_site"
     out.mkdir(exist_ok=True)
     (out / "index.html").write_text(html_doc, encoding="utf-8")
-    extra = Path(__file__).resolve().parent / "ai-photoshop.html"      # standalone AI Photoshop page (optional)
+    (out / ".nojekyll").write_text("", encoding="utf-8")        # GitHub Pages: serve the files as they are (no Jekyll build)
+    extra = here / "ai-photoshop.html"                          # standalone AI Photoshop page
     if extra.is_file():
         (out / "ai-photoshop.html").write_text(extra.read_text(encoding="utf-8"), encoding="utf-8")
         print(f"Copied {extra.name} to {out}")
+    else:
+        print("WARNING: ai-photoshop.html not found next to nepse_news_hub.py (the standalone AI Photoshop page was not published).")
+    # site folders: name -> (required files, names that are not published: development files only)
+    folders = {
+        "ai-lib": (("realesr-general-x4v3.onnx", "ort.wasm.min.js", "ort-wasm-simd-threaded.mjs", "ort-wasm-simd-threaded.wasm"), ()),
+        "pdf-editor": (("index.html", "js/main.js", "css/editor.css"), ("tests", "node_modules", "build-standalone.mjs", "README.md", "PDF-Editor-Local.html")),
+    }
+    for name, (required, skip) in folders.items():
+        src = here / name
+        if not src.is_dir():
+            print(f"WARNING: folder {name}/ not found next to nepse_news_hub.py: it was not published "
+                  f"({'AI Enhance will stay hidden' if name == 'ai-lib' else 'the PDF Editor tab will show a message'}).")
+            continue
+        missing = [f for f in required if not (src / f).is_file()]
+        if missing:
+            print(f"WARNING: {name}/ is incomplete, missing: {', '.join(missing)}")
+        shutil.copytree(src, out / name, dirs_exist_ok=True, ignore=shutil.ignore_patterns(*skip) if skip else None)
+        print(f"Copied {name}/ to {out}")
     print(f"Public site written to: {out / 'index.html'}  ({len(html_doc) // 1024} KB)")
+    print("Next: the GitHub workflow deploys public_site/ automatically; by hand, upload the CONTENT of public_site/ to GitHub Pages.")
 
 
 def cmd_init(args):
@@ -7849,7 +8068,7 @@ DASHBOARD_HTML = (DASHBOARD_HTML.replace("</style></head>", _EXT_CSS_V12 + "</st
 #   Works in the live hub (/api/stories) AND in the static public snapshot (stories are embedded at build time).
 #   Public snapshot: headlines, sources, times and links only; never AI text or excerpts.
 # ======================================================================================
-VERSION = "1.3.0"  # Related Coverage (story clusters) in live hub and public snapshot
+VERSION = "1.4.0"  # v1.4: AI Enhance (ai-lib/) + PDF Editor (pdf-editor/) wired into AI Photoshop; publish copies the whole site
 _story_cache = {}
 STORY_DAYS = 7          # how many NPT days are embedded in the public snapshot
 STORY_MAX_MEMBERS = 20  # headlines listed per story
