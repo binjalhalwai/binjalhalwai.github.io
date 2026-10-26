@@ -28,6 +28,9 @@ on:
       - screener_public.json
       - nepse_news_hub.py
       - manual_headlines.txt
+      - ai-photoshop.html
+      - ai-lib/**
+      - pdf-editor/**
 
 permissions:
   contents: read
