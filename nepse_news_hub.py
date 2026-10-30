@@ -1960,12 +1960,12 @@ const find=q=>{q=String(q||'').trim().toUpperCase();return R.find(r=>String(r[CO
   });
 })();
 
-/* helpers shared with the CALCULATORS tab (same company data, no second database) */
+/* helpers shared with the FINANCIAL TOOLS (calculators) tab (same company data, no second database) */
 window.NNH_DATA={find:find,g:g,fmt:fmt,esc:esc,date:D.date,go:v=>go(v)};
 
 /* ---------- tabs ---------- */
 const nav=document.createElement('nav');nav.className='vtabs';nav.setAttribute('aria-label','Sections');
-nav.innerHTML='<button class="on" data-v="n">NEWS PORTAL<em>LATEST</em></button><button data-v="scr">STOCK SCREENER</button><button data-v="calc">CALCULATORS</button><button data-v="aiph">AI PHOTOSHOP</button>';
+nav.innerHTML='<button class="on" data-v="n">MARKET NEWS<em>LATEST</em></button><button data-v="scr">STOCK SCREENER</button><button data-v="calc">FINANCIAL TOOLS</button><button data-v="aiph">AI STUDIO</button>';
 const sub=document.createElement('nav');sub.className='vtabs sub';sub.setAttribute('aria-label','Stock screener tools');sub.hidden=true;
 sub.innerHTML=[['v-mkt','MARKET'],['v-s','SCREENER'],['v-map','HEATMAP'],['v-sig','SIGNALS'],['v-val','VALUATION'],['v-qua','QUALITY'],['v-div','DIVIDENDS'],['v-cmp','COMPARE'],['v-360','STOCK 360'],['v-bnk','BANKING'],['v-hyd','HYDROPOWER'],['v-wch','WATCHLIST']]
  .map(a=>`<button data-v="${a[0]}">${a[1]}</button>`).join('');
@@ -2384,8 +2384,8 @@ CALCULATORS_BLOCK = r'''<style>
 @media(max-width:520px){#calc .nc-act .cbtn{flex:1 1 30%}#calc .nc-ta{min-height:170px}}
 #calc .nc-act [hidden]{display:none!important}
 </style>
-<nav class="vtabs sub" id="calc-nav" aria-label="Calculators" hidden></nav>
-<section id="calc" hidden aria-label="Calculators"><div id="calc-body"></div></section>
+<nav class="vtabs sub" id="calc-nav" aria-label="Financial tools" hidden></nav>
+<section id="calc" hidden aria-label="Financial tools"><div id="calc-body"></div></section>
 <script>
 /*
  * bs_core.js - BS (Bikram Sambat) <-> AD (Gregorian) conversion core.
@@ -3758,12 +3758,12 @@ reg('trade', {
     return H('Total purchase cost', rs(r.total_purchase_cost), 'Effective cost per share: <b>' + rs(r.effective_cost_per_share) + '</b>') +
       S([['Gross value', rs(r.gross_transaction_value)], ['Brokerage (' + r.brokerage_rate + '%)', rs(r.brokerage_charge)], ['SEBON fee', rs(r.sebon_fee)], ['DP charge', rs(r.dp_charge)]]);
   },
-  notes: function () { return feeNote() + '<p>The effective cost per share is the break-even starting point; selling costs and capital gains tax come on top (see Sell &amp; CGT).</p>'; }
+  notes: function () { return feeNote() + '<p>The effective cost per share is the break-even starting point; selling costs and capital gains tax come on top (see Sell Proceeds).</p>'; }
 });
 
 /* SELL */
 reg('trade', {
-  id: 'sell', name: 'Sell &amp; CGT', blurb: 'Net cash from selling shares after brokerage, SEBON fee, DP charge and capital gains tax, with profit after tax.',
+  id: 'sell', name: 'Sell Proceeds', blurb: 'Net cash from selling shares after brokerage, SEBON fee, DP charge and capital gains tax, with profit after tax.',
   badge: 'Confirm CGT',
   warn: '<b>Check the CGT rate.</b> The capital gains tax rates below are editable defaults and may not reflect the latest budget or Finance Act changes. Confirm the rate that applies to you before relying on this result.',
   fields: [SYMF,
@@ -3824,7 +3824,7 @@ CALCS.push({ id: 'averaging', group: 'trade', name: 'Averaging (WACC)', badge: '
         out.innerHTML = H('Weighted average cost per share', rs(r.wacc), 'Total quantity ' + whole(r.total_quantity) + ' kitta &middot; total cost ' + rs(r.total_cost)) +
           T(['#', 'Type', 'Qty', 'Gross', 'Broker', 'SEBON', 'Total cost'], r.batches.map(function (b) {
             return [b.batch_no, b.type, whole(b.quantity), n2(b.gross_value), n2(b.broker_fee), n2(b.sebon_fee), b.counted ? n2(b.total_investment_cost) : '<span class="cmu">not counted</span>'];
-          })) + (r.wacc > 0 ? '<p class="cnote">This WACC is available in <b>Sell &amp; CGT</b> via the &ldquo;Use WACC&rdquo; button.</p>' : '');
+          })) + (r.wacc > 0 ? '<p class="cnote">This WACC is available in <b>Sell Proceeds</b> via the &ldquo;Use WACC&rdquo; button.</p>' : '');
       } catch (e) { out.innerHTML = '<div class="cerr" role="alert">Please check: ' + esc(e.message) + '</div>'; }
     }
     el.addEventListener('input', function (e) { var t = e.target; if (t.dataset.k == null) return; var c = +t.dataset.c; rows[+t.dataset.k][c] = c === 0 ? t.value : t.value; run(); });
@@ -4505,13 +4505,13 @@ reg('val', {
 
 /* ---------- groups, navigation, overview ---------- */
 var GROUPS = [
-  { id: 'trade', name: 'Trading & Costs', blurb: 'Buy, sell, average and margin' },
+  { id: 'trade', name: 'Trading', blurb: 'Buy cost, sell proceeds, averaging and margin' },
   { id: 'corp', name: 'Corporate Actions', blurb: 'Bonus, right and dividend adjustments' },
-  { id: 'tech', name: 'Technical', blurb: 'Support and resistance levels' },
+  { id: 'tech', name: 'Market Analysis', blurb: 'Pivot points and support and resistance levels' },
   { id: 'val', name: 'Investment & Valuation', blurb: 'Intrinsic value, P/E, P/B, DCF and margin of safety' },
   { id: 'growth', name: 'Growth & Loans', blurb: 'SIP, CAGR and EMI' },
-  { id: 'dates', name: 'Date Converter', blurb: 'BS \u21C4 AD dates and exact age' },
-  { id: 'conv', name: 'Converter Tools', blurb: 'Numbers to words, unit conversion and Nepali text (Preeti, Unicode, Roman)' }
+  { id: 'dates', name: 'Dates & Time', blurb: 'BS \u21C4 AD dates and exact age' },
+  { id: 'conv', name: 'Converters', blurb: 'Numbers to words, unit conversion and Nepali text (Preeti, Unicode, Roman)' }
 ];
 /* order inside each group (a new calculator without an entry here goes to the end of its group) */
 var ORDER = ['buy', 'sell', 'averaging', 'margin', 'pl', 'breakeven', 'target', 'possize', 'rr', 'bonusshares', 'rightshares', 'combined', 'drip', 'bonus', 'right', 'dividend', 'pivot',
@@ -4521,14 +4521,14 @@ var byId = {}; CALCS.forEach(function (c) { byId[c.id] = c; });
 var cur = null, lastIn = {};   // lastIn: last calculator opened in each group
 
 /* Two-level bar: ALL + the five groups; under it, the calculators of the selected group */
-nav.innerHTML = '<div class="cn-row" id="cn-groups" role="group" aria-label="Calculator groups"><button type="button" data-g="home">ALL</button>' +
+nav.innerHTML = '<div class="cn-row" id="cn-groups" role="group" aria-label="Financial tool categories"><button type="button" data-g="home">ALL</button>' +
   GROUPS.map(function (g) { return '<button type="button" data-g="' + g.id + '">' + g.name.replace('&', '&amp;').toUpperCase() + '</button>'; }).join('') + '</div>' +
   '<div class="cn-row cn-sub" id="cn-subs" role="group" aria-label="Calculators in this group" hidden>' +
   CALCS.map(function (c) { return '<button type="button" data-c="' + c.id + '" data-grp="' + c.group + '" hidden>' + c.name.toUpperCase() + '</button>'; }).join('') + '</div>';
 var subs = nav.querySelector('#cn-subs');
 
 function home() {
-  body.innerHTML = '<div class="chead"><h2>Calculators</h2><p>Practical calculators for Nepal\u2019s capital market and personal finance. Enter your numbers; nothing is stored or sent anywhere.</p></div>' +
+  body.innerHTML = '<div class="chead"><h2>Financial Tools</h2><p>Practical calculators for Nepal\u2019s capital market and personal finance. Enter your numbers; nothing is stored or sent anywhere.</p></div>' +
     GROUPS.map(function (g) {
       return '<h3 class="gh">' + g.name.replace('&', '&amp;') + ' <small>' + g.blurb + '</small></h3><div class="ovg">' + CALCS.filter(function (c) { return c.group === g.id; }).map(function (c) {
         return '<button type="button" class="ovc" data-c="' + c.id + '"><b>' + c.name + (c.badge ? ' <span class="badge wa">' + c.badge + '</span>' : '') + '</b><span>' + c.blurb + '</span></button>';
@@ -4785,8 +4785,8 @@ AI_PHOTOSHOP_BLOCK = r'''<style>
 #aiph #enPos{width:100%;accent-color:var(--ac);margin:10px 0 0;min-height:26px}
 #aiph .encap{margin-top:8px;font-size:12px;color:var(--mu);overflow-wrap:anywhere}
 </style>
-<section id="aiph" hidden aria-label="AI Photoshop">
- <div class="aitools" role="group" aria-label="AI Photoshop tools">
+<section id="aiph" hidden aria-label="AI Studio">
+ <div class="aitools" role="group" aria-label="AI Studio tools">
   <button type="button" class="aitool on" data-ait="bg" aria-pressed="true">Remove Background</button>
   <button type="button" class="aitool" data-ait="en" aria-pressed="false">Unblur &amp; Enhance</button>
   <button type="button" class="aitool" data-ait="pass" aria-pressed="false">Passport Photo</button>
