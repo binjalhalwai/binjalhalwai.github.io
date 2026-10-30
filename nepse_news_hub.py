@@ -2362,6 +2362,7 @@ CALCULATORS_BLOCK = r'''<style>
 #calc .cwarn{margin:8px 0}
 #calc details.rules{margin:0 0 12px;background:var(--p);border:1px solid var(--ln);border-radius:8px;padding:8px 14px}#calc details.rules .rg{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:4px 10px;margin-top:10px}
 #calc details.rules table input{width:110px;min-height:32px}
+#calc details.rules[hidden]{display:none}
 /* Nepali Text Converter */
 @font-face{font-family:"NC Preeti";src:local("Preeti"),local("Preeti Normal"),local("PCS NEPALI"),local("Preeti Regular");font-display:swap}
 #calc .nc .cgrid{margin-top:2px}
@@ -3742,11 +3743,11 @@ var fillLtp = function (map) { return function (r) { var o = {}, p = D.g(r, 'LTP
 
 /* ---------- calculator definitions ---------- */
 var CALCS = [];
-function reg(group, def, extra) { def.group = group; CALCS.push(Object.assign({ id: def.id, name: def.name, blurb: def.blurb, group: group, badge: def.badge || '', render: formCalc(def) }, extra || {})); }
+function reg(group, def, extra) { def.group = group; CALCS.push(Object.assign({ id: def.id, name: def.name, blurb: def.blurb, group: group, badge: def.badge || '', rates: def.rates || null, render: formCalc(def) }, extra || {})); }
 
 /* BUY */
 reg('trade', {
-  id: 'buy', name: 'Buy Cost', blurb: 'Total cost of buying shares on NEPSE: brokerage, SEBON fee and DP charge, with the effective cost per share.',
+  id: 'buy', rates: ['fees','dp'], name: 'Buy Cost', blurb: 'Total cost of buying shares on NEPSE: brokerage, SEBON fee and DP charge, with the effective cost per share.',
   fields: [SYMF,
     { id: 'price', label: 'Buy price (Rs per share)', value: 500, step: '0.01' },
     { id: 'qty', label: 'Quantity (kitta)', value: 100, step: '1' },
@@ -3763,7 +3764,7 @@ reg('trade', {
 
 /* SELL */
 reg('trade', {
-  id: 'sell', name: 'Sell Proceeds', blurb: 'Net cash from selling shares after brokerage, SEBON fee, DP charge and capital gains tax, with profit after tax.',
+  id: 'sell', rates: ['fees','dp','cgt'], name: 'Sell Proceeds', blurb: 'Net cash from selling shares after brokerage, SEBON fee, DP charge and capital gains tax, with profit after tax.',
   badge: 'Confirm CGT',
   warn: '<b>Check the CGT rate.</b> The capital gains tax rates below are editable defaults and may not reflect the latest budget or Finance Act changes. Confirm the rate that applies to you before relying on this result.',
   fields: [SYMF,
@@ -3797,7 +3798,7 @@ reg('trade', {
 });
 
 /* AVERAGING (custom UI) */
-CALCS.push({ id: 'averaging', group: 'trade', name: 'Averaging (WACC)', badge: '',
+CALCS.push({ id: 'averaging', group: 'trade', name: 'Averaging (WACC)', badge: '', rates: ['fees'],
   blurb: 'Weighted average cost per share across several purchases: secondary market, IPO and bonus batches.',
   render: function (el) {
     var rows = [['Secondary', 1000, 500], ['Secondary', 1000, 450], ['Secondary', 800, 420]];
@@ -3898,7 +3899,7 @@ reg('corp', {
 
 /* DIVIDEND */
 reg('corp', {
-  id: 'dividend', name: 'Dividend &amp; TDS', blurb: 'Bonus and cash dividend, tax on both, cash credited and any tax shortfall you must pay.',
+  id: 'dividend', rates: ['tds'], name: 'Dividend &amp; TDS', blurb: 'Bonus and cash dividend, tax on both, cash credited and any tax shortfall you must pay.',
   fields: [SYMF, { id: 'units', label: 'Shares held (kitta)', value: 1000, step: '1' }, { id: 'b', label: 'Bonus dividend (%)', value: 15, step: 'any' }, { id: 'c', label: 'Cash dividend (%)', value: 5.7, step: 'any' },
     { id: 'fv', label: 'Face value (Rs)', value: 100, step: 'any', adv: true }, { id: 't', label: 'Tax rate on dividend (%)', value: function () { return E.RATES.tds * 100; }, step: 'any', adv: true }],
   advTitle: 'Face value and tax rate (editable)',
@@ -4251,7 +4252,7 @@ var PLAIN_FEES = 'Brokerage = traded value &times; broker rate (at least the min
 
 /* ---------- A. TRADING & COSTS ---------- */
 reg('trade', {
-  id: 'pl', name: 'Profit / Loss', blurb: 'Net profit or loss on a trade after buy and sell charges and capital gains tax, with return % and holding period.',
+  id: 'pl', rates: ['fees','dp','cgt'], name: 'Profit / Loss', blurb: 'Net profit or loss on a trade after buy and sell charges and capital gains tax, with return % and holding period.',
   fields: [SYMF, { id: 'b', label: 'Buy price (Rs per share)', value: 500, step: '0.01' }, { id: 's', label: 'Sell price (Rs per share)', value: 600, step: '0.01' }, { id: 'q', label: 'Quantity (kitta)', value: 100, step: '1' },
     { id: 'bd', kind: 'date', label: 'Buy date', value: function () { return isoDaysAgo(120); } }, { id: 'sd', kind: 'date', label: 'Sell date', value: function () { return isoDaysAgo(0); } }, BR, DPF, CGF],
   advTitle: 'Charges and tax overrides (optional)',
@@ -4267,7 +4268,7 @@ reg('trade', {
 });
 
 reg('trade', {
-  id: 'breakeven', name: 'Break-Even Price', blurb: 'The lowest sell price that recovers all buy-side and sell-side costs.',
+  id: 'breakeven', rates: ['fees','dp'], name: 'Break-Even Price', blurb: 'The lowest sell price that recovers all buy-side and sell-side costs.',
   fields: [SYMF, { id: 'b', label: 'Buy price (Rs per share)', value: 500, step: '0.01' }, { id: 'q', label: 'Quantity (kitta)', value: 100, step: '1' }, BR, DPF],
   advTitle: 'Charges (optional)', fill: fillLtp({ b: 1 }),
   run: function (v) {
@@ -4280,7 +4281,7 @@ reg('trade', {
 });
 
 reg('trade', {
-  id: 'target', name: 'Target Sell Price', blurb: 'The sell price needed to reach a net profit (after all charges and CGT) that you choose.',
+  id: 'target', rates: ['fees','dp','cgt'], name: 'Target Sell Price', blurb: 'The sell price needed to reach a net profit (after all charges and CGT) that you choose.',
   fields: [SYMF, { id: 'b', label: 'Buy price (Rs per share)', value: 500, step: '0.01' }, { id: 'q', label: 'Quantity (kitta)', value: 100, step: '1' },
     { id: 'mode', kind: 'sel', label: 'I want to set my goal as', value: 'profit', opts: [['profit', 'Net profit in Rs'], ['pct', 'Net return %']] },
     { id: 'dprofit', label: 'Desired net profit (Rs)', value: 5000, step: 'any', showWhen: { id: 'mode', 'in': ['profit'] } }, { id: 'dpct', label: 'Desired net return (%)', value: 10, step: 'any', showWhen: { id: 'mode', 'in': ['pct'] } },
@@ -4383,7 +4384,7 @@ reg('corp', {
 /* ---------- C. INVESTMENT & VALUATION ---------- */
 function loadEps(r) { return { price: D.g(r, 'LTP'), eps: D.g(r, 'EPS (Annu.)') }; }
 reg('val', {
-  id: 'graham', name: 'Graham Value', blurb: 'Benjamin Graham\u2019s growth formula for a rough intrinsic value per share.',
+  id: 'graham', rates: ['valuation'], name: 'Graham Value', blurb: 'Benjamin Graham\u2019s growth formula for a rough intrinsic value per share.',
   fields: [SYMF, { id: 'eps', label: 'EPS (Rs)', value: 35, step: '0.01', tip: T_EPS }, { id: 'g', label: 'Expected growth rate (% a year)', hint: 'next 7\u201310 years', value: 6, step: 'any' }, { id: 'y', label: 'Current AAA bond yield (%)', value: 9, step: 'any' }, { id: 'price', label: 'Current market price (Rs)', hint: 'optional', value: '', step: '0.01' }],
   fill: loadEps,
   run: function (v) {
@@ -4394,7 +4395,7 @@ reg('val', {
   notes: '<p>The formula was designed for stable, profitable companies and uses a US bond yield of 4.4% as its base. Use it as one of several checks. Use a Nepal AAA-rated corporate bond yield that you trust.</p>'
 });
 reg('val', {
-  id: 'pe', name: 'P/E Valuation', blurb: 'Fair value from earnings and a target price-to-earnings multiple.',
+  id: 'pe', rates: ['valuation'], name: 'P/E Valuation', blurb: 'Fair value from earnings and a target price-to-earnings multiple.',
   fields: [SYMF, { id: 'eps', label: 'EPS (Rs)', value: 35, step: '0.01', tip: T_EPS }, { id: 'price', label: 'Current market price (Rs)', value: 600, step: '0.01' }, { id: 'pe', label: 'Target or sector average P/E', value: 18, step: 'any' }], fill: loadEps,
   run: function (v) {
     var r = E.calculatePeValuation({ eps: v.eps, price: v.price, target_pe: v.pe });
@@ -4404,7 +4405,7 @@ reg('val', {
   notes: '<p>Compare with companies in the same sector. A low P/E can signal a cheap price or falling earnings.</p>'
 });
 reg('val', {
-  id: 'pb', name: 'P/B Valuation', blurb: 'Fair value from book value and a target price-to-book multiple.',
+  id: 'pb', rates: ['valuation'], name: 'P/B Valuation', blurb: 'Fair value from book value and a target price-to-book multiple.',
   fields: [SYMF, { id: 'bv', label: 'Book value per share (Rs)', value: 250, step: '0.01', tip: T_BV }, { id: 'price', label: 'Current market price (Rs)', value: 450, step: '0.01' }, { id: 'pb', label: 'Target or sector average P/B', value: 2, step: 'any' }],
   fill: function (r) { var pb = D.g(r, 'P/B'), p = D.g(r, 'LTP'); return { price: p, bv: pb > 0 ? p / pb : null }; }, fillMsg: function () { return 'Loaded the latest price and book value (price divided by P/B)'; },
   run: function (v) {
@@ -4428,7 +4429,7 @@ reg('val', {
   notes: '<p>Dividends are not guaranteed. Dividend tax is not deducted here.</p>'
 });
 reg('val', {
-  id: 'ddm', name: 'Dividend Discount Model', blurb: 'Value a share from its expected, steadily growing dividends.',
+  id: 'ddm', rates: ['valuation'], name: 'Dividend Discount Model', blurb: 'Value a share from its expected, steadily growing dividends.',
   fields: [SYMF, { id: 'd0', label: 'Current annual dividend per share (Rs)', value: 15, step: '0.01', tip: T_DPS }, { id: 'g', label: 'Expected dividend growth (% a year)', value: 4, step: 'any' }, { id: 'r', label: 'Required rate of return (%)', value: 13, step: 'any' }, { id: 'price', label: 'Current market price (Rs)', hint: 'optional', value: '', step: '0.01' }],
   fill: function (r) { return { price: D.g(r, 'LTP') }; },
   run: function (v) {
@@ -4439,7 +4440,7 @@ reg('val', {
   notes: '<p>Very sensitive to the gap between the required return and growth. Works best for companies with a stable dividend record.</p>'
 });
 reg('val', {
-  id: 'dcf', name: 'DCF Valuation', blurb: 'Two-stage discounted cash flow: growth for some years, then steady terminal growth.',
+  id: 'dcf', rates: ['valuation','dcf'], name: 'DCF Valuation', blurb: 'Two-stage discounted cash flow: growth for some years, then steady terminal growth.',
   fields: [SYMF, { id: 'fcf', label: 'Current free cash flow (Rs)', value: 800000000, step: 'any' }, { id: 'g1', label: 'Initial growth rate (% a year)', value: 10, step: 'any' }, { id: 'gt', label: 'Terminal growth rate (%)', value: 4, step: 'any', tip: T_TG },
     { id: 'w', label: 'Discount rate / WACC (%)', value: 12, step: 'any', tip: T_WACC }, { id: 'n', label: 'Projection years', value: 5, step: '1' }, { id: 'nd', label: 'Net debt (Rs)', hint: 'negative if net cash', value: 2000000000, step: 'any' },
     { id: 'sh', label: 'Shares outstanding', value: 100000000, step: 'any' }, { id: 'price', label: 'Current market price (Rs)', hint: 'optional', value: '', step: '0.01' }],
@@ -4454,7 +4455,7 @@ reg('val', {
   notes: '<p>The result is very sensitive to growth and the discount rate. When the terminal value is most of the total, the answer depends mainly on assumptions about the far future.</p>'
 });
 reg('val', {
-  id: 'intrinsic', name: 'Intrinsic Value', blurb: 'Choose Graham, DDM or DCF, or blend them. Each method is shown separately.',
+  id: 'intrinsic', rates: ['valuation','dcf'], name: 'Intrinsic Value', blurb: 'Choose Graham, DDM or DCF, or blend them. Each method is shown separately.',
   fields: [SYMF, { id: 'method', kind: 'sel', label: 'Valuation method', value: 'blend', opts: [['graham', 'Graham'], ['ddm', 'Dividend discount model'], ['dcf', 'DCF'], ['blend', 'Blended average of all three']] }, { id: 'price', label: 'Current market price (Rs)', hint: 'optional', value: '', step: '0.01' },
     { id: 'g_eps', label: 'Graham: EPS (Rs)', value: 35, step: '0.01', tip: T_EPS, showWhen: { id: 'method', 'in': ['graham', 'blend'] } }, { id: 'g_growth', label: 'Graham: growth (% a year)', value: 6, step: 'any', showWhen: { id: 'method', 'in': ['graham', 'blend'] } }, { id: 'g_yield', label: 'Graham: AAA bond yield (%)', value: 9, step: 'any', showWhen: { id: 'method', 'in': ['graham', 'blend'] } },
     { id: 'd_d0', label: 'DDM: annual dividend per share (Rs)', value: 15, step: '0.01', tip: T_DPS, showWhen: { id: 'method', 'in': ['ddm', 'blend'] } }, { id: 'd_growth', label: 'DDM: dividend growth (%)', value: 4, step: 'any', showWhen: { id: 'method', 'in': ['ddm', 'blend'] } }, { id: 'd_req', label: 'DDM: required return (%)', value: 13, step: 'any', showWhen: { id: 'method', 'in': ['ddm', 'blend'] } },
@@ -4472,7 +4473,7 @@ reg('val', {
   notes: '<p>Different methods can give very different answers. A wide spread is a sign that assumptions matter more than the maths.</p>'
 });
 reg('val', {
-  id: 'targetprice', name: 'Target Price', blurb: 'A target price from EPS and a target P/E, or from your own intrinsic value, and the move needed from today.',
+  id: 'targetprice', rates: ['valuation'], name: 'Target Price', blurb: 'A target price from EPS and a target P/E, or from your own intrinsic value, and the move needed from today.',
   fields: [SYMF, { id: 'mode', kind: 'sel', label: 'Based on', value: 'pe', opts: [['pe', 'EPS and target P/E'], ['iv', 'My intrinsic value']] }, { id: 'eps', label: 'EPS (Rs)', value: 35, step: '0.01', tip: T_EPS, showWhen: { id: 'mode', 'in': ['pe'] } }, { id: 'pe', label: 'Target P/E', value: 18, step: 'any', showWhen: { id: 'mode', 'in': ['pe'] } },
     { id: 'iv', label: 'Intrinsic value (Rs)', value: 700, step: '0.01', showWhen: { id: 'mode', 'in': ['iv'] } }, { id: 'price', label: 'Current market price (Rs)', value: 600, step: '0.01' }], fill: loadEps,
   run: function (v) {
@@ -4483,7 +4484,7 @@ reg('val', {
   notes: '<p>A target price is an estimate, not a forecast or a recommendation.</p>'
 });
 reg('val', {
-  id: 'mos', name: 'Margin of Safety', blurb: 'How far the market price sits below your estimate of intrinsic value.',
+  id: 'mos', rates: ['mos'], name: 'Margin of Safety', blurb: 'How far the market price sits below your estimate of intrinsic value.',
   fields: [SYMF, { id: 'iv', label: 'Intrinsic value (Rs)', value: 700, step: '0.01' }, { id: 'price', label: 'Current market price (Rs)', value: 500, step: '0.01', tip: T_MOS }], fill: function (r) { return { price: D.g(r, 'LTP') }; },
   run: function (v) {
     var r = E.calculateMarginOfSafety({ intrinsic_value: v.iv, price: v.price });
@@ -4545,6 +4546,7 @@ function open(id, quiet) {
   subs.querySelectorAll('button').forEach(function (b) { b.hidden = b.dataset.grp !== grp; b.classList.toggle('on', b.dataset.c === id); });
   body.innerHTML = '';
   if (id === 'home') home(); else { var w = document.createElement('div'); w.className = 'cwrap'; body.appendChild(w); byId[id].render(w); }
+  if (typeof panel !== 'undefined' && panel && typeof syncRules === 'function') syncRules();
   if (!quiet) {
     try { history.replaceState(null, '', id === 'home' ? '#calc' : '#calc/' + id); } catch (e) { /* ignore */ }
     window.scrollTo(0, 0);
@@ -4562,19 +4564,25 @@ body.addEventListener('click', function (e) { var b = e.target.closest('.ovc'); 
 /* ---------- Rates & rules panel: the one place where NEPSE rules are edited (applies until the page is reloaded) ---------- */
 var RT = E.RATES, DEF = E.DEFAULT_RATES, panel = document.createElement('details');
 panel.className = 'cdet rules'; panel.id = 'cn-rules';
-function rf(id, label, val, step) { return '<div class="fld"><label for="rl_' + id + '">' + label + '</label><input id="rl_' + id + '" type="number" inputmode="decimal" step="' + (step || 'any') + '" value="' + val + '"></div>'; }
+function rf(id, label, val, step, sec) { return '<div class="fld"' + (sec ? ' data-sec="' + sec + '"' : '') + '><label for="rl_' + id + '">' + label + '</label><input id="rl_' + id + '" type="number" inputmode="decimal" step="' + (step || 'any') + '" value="' + val + '"></div>'; }
 function rulesHtml() {
   var s = RT.brokerage.slabs, rows = s.map(function (x, k) {
     return '<tr><td>' + (k === s.length - 1 ? 'Above Rs ' + whole(s[k - 1][0]) : (k ? 'Rs ' + whole(s[k - 1][0]) + ' to ' : 'Up to ') + '<input id="rl_lim' + k + '" type="number" step="any" value="' + x[0] + '" aria-label="Upper limit of slab ' + (k + 1) + '">') + '</td><td><input id="rl_rate' + k + '" type="number" step="any" value="' + +(x[1] * 100).toFixed(4) + '" aria-label="Rate of slab ' + (k + 1) + ' in percent"> %</td></tr>';
   }).join('');
-  return '<summary>Rates &amp; rules (editable)</summary><p class="cmu">NEPSE-style defaults used by the trading calculators. Change them if your broker or the rules differ. Changes apply to all calculators until you reload the page and are not saved or sent anywhere.</p>' +
-    '<div class="ct"><table class="avt"><thead><tr><th>Broker commission: transaction value (Rs)</th><th>Rate</th></tr></thead><tbody>' + rows + '</tbody></table></div><div class="rg">' +
-    rf('min', 'Minimum commission (Rs)', RT.brokerage.minFee) + rf('sebon', 'SEBON fee (% of value)', +(RT.sebon * 100).toFixed(4)) + rf('dp', 'DP charge (Rs, sell side)', RT.dp) +
-    rf('cs', 'CGT: held 365 days or less (%)', +(RT.cgt.individual_short * 100).toFixed(4)) + rf('cl', 'CGT: held more than 365 days (%)', +(RT.cgt.individual_long * 100).toFixed(4)) + rf('ci', 'CGT: institutional (%)', +(RT.cgt.institutional * 100).toFixed(4)) + rf('tds', 'Dividend tax (%)', +(RT.tds * 100).toFixed(4)) +
-    rf('band', 'Fairly valued band (+/- % of price)', RT.valuation.fair_band_pct) + rf('tg', 'Warn if terminal growth above (%)', RT.valuation.terminal_growth_warn_pct) + rf('ms', 'Strong margin of safety from (%)', RT.valuation.mos_strong_pct) + rf('mm', 'Moderate margin of safety from (%)', RT.valuation.mos_moderate_pct) +
+  return '<summary>Rates &amp; rules (editable)</summary><p class="cmu">Only the rates and rules this calculator uses are shown (NEPSE-style defaults). Change them if your broker or the rules differ. Changes apply to every calculator that uses them until you reload the page and are not saved or sent anywhere.</p>' +
+    '<div class="ct" data-sec="fees"><table class="avt"><thead><tr><th>Broker commission: transaction value (Rs)</th><th>Rate</th></tr></thead><tbody>' + rows + '</tbody></table></div><div class="rg">' +
+    rf('min', 'Minimum commission (Rs)', RT.brokerage.minFee, null, 'fees') + rf('sebon', 'SEBON fee (% of value)', +(RT.sebon * 100).toFixed(4), null, 'fees') + rf('dp', 'DP charge (Rs)', RT.dp, null, 'dp') +
+    rf('cs', 'CGT: held 365 days or less (%)', +(RT.cgt.individual_short * 100).toFixed(4), null, 'cgt') + rf('cl', 'CGT: held more than 365 days (%)', +(RT.cgt.individual_long * 100).toFixed(4), null, 'cgt') + rf('ci', 'CGT: institutional (%)', +(RT.cgt.institutional * 100).toFixed(4), null, 'cgt') + rf('tds', 'Dividend tax (%)', +(RT.tds * 100).toFixed(4), null, 'tds') +
+    rf('band', 'Fairly valued band (+/- % of price)', RT.valuation.fair_band_pct, null, 'valuation') + rf('tg', 'Warn if terminal growth above (%)', RT.valuation.terminal_growth_warn_pct, null, 'dcf') + rf('ms', 'Strong margin of safety from (%)', RT.valuation.mos_strong_pct, null, 'mos') + rf('mm', 'Moderate margin of safety from (%)', RT.valuation.mos_moderate_pct, null, 'mos') +
     '</div><div class="cact"><button type="button" class="cbtn primary" data-r="apply">Apply</button><button type="button" class="cbtn" data-r="reset">Reset to defaults</button></div><div class="symmsg" id="rl_msg" role="status"></div>';
 }
-function drawRules() { var o = panel.open; panel.innerHTML = rulesHtml(); panel.open = o; }
+/* Show the panel only for calculators that declare which editable rule sets they read (CALCS entry: rates: ['fees','dp','cgt','tds','valuation','dcf','mos']); hide it everywhere else. The rate data itself is unchanged. */
+function syncRules() {
+  var want = cur && byId[cur] ? byId[cur].rates : null, any = false;
+  panel.querySelectorAll('[data-sec]').forEach(function (n) { var on = !!want && want.indexOf(n.dataset.sec) >= 0; n.hidden = !on; if (on) any = true; });
+  panel.hidden = !any;
+}
+function drawRules() { var o = panel.open; panel.innerHTML = rulesHtml(); panel.open = o; syncRules(); }
 function applyRules() {
   var q = function (id) { return panel.querySelector('#rl_' + id); }, g = function (id, label, o) { return E.num(q(id).value, label, o); }, msg = panel.querySelector('#rl_msg');
   try {
@@ -5749,10 +5757,8 @@ setPos(50);
     try {
       var h = await unpack();
       if (hash) h = h.replace('<head>', '<head><script>window.__PDF_ROUTE=' + JSON.stringify(hash) + ';<\/script>');
-      var old = url;
-      url = URL.createObjectURL(new Blob([h], { type: 'text/html' }));
-      fr.setAttribute('src', url); loaded = true;
-      if (old) setTimeout(function () { try { URL.revokeObjectURL(old); } catch (e) {} }, 3000);
+      /* inline srcdoc (not a blob: link): some browsers, extensions and office policies show "This content is blocked" for blob frames */
+      fr.removeAttribute('src'); fr.srcdoc = h; loaded = true;
     } catch (e) { console.error('PDF Tools', e); fail(); }
   };
   /* each PDF tool starts clean: the app asks for a fresh load when you open another tool */
@@ -6131,7 +6137,7 @@ function checkBackground() {
   var lo = Math.min(mr, mg, mb), hi = Math.max(mr, mg, mb), ok = lo >= BG_WHITE_MIN && hi - lo <= BG_SPREAD_MAX && sd <= BG_STD_MAX;
   var text = ok ? 'Background check: the top corners look plain white or very light. Good.'
     : 'Background check: the top corners are not plain white (average colour rgb(' + Math.round(mr) + ', ' + Math.round(mg) + ', ' + Math.round(mb) + (sd > BG_STD_MAX ? ', not plain' : '') +
-      ')). Use a white wall, or remove the background first (AI Photoshop > Remove Background) and upload that PNG here.';
+      ')). Use a white wall, or remove the background first (AI Studio > Remove Background) and upload that PNG here.';
   if (text !== lastBg) { lastBg = text; el.bg.textContent = text; el.bg.className = 'bgstat ' + (ok ? 'ok' : 'bad'); }
 }
 

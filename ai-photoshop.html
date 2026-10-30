@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AI Photoshop - Remove Background, Unblur, Passport Photo, PDF Tools &amp; Editor | Binjal Halwai NewsPortal</title>
+<title>AI Studio - Remove Background, Unblur, Passport Photo, PDF Tools &amp; Editor | Binjal Halwai NewsPortal</title>
 <meta name="description" content="Free photo tools: remove image backgrounds, unblur and enhance photos, and make passport photos (Nepal 35 x 45 mm, US, custom) privately in your browser.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%234d5b2a'/%3E%3Ctext x='16' y='22' font-size='15' font-weight='700' text-anchor='middle' fill='white' font-family='Arial'%3EBH%3C/text%3E%3C/svg%3E">
 <script>try{var t=localStorage.getItem('aiph_theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
 <script>
-/* Embedded mode: the main site shows this page inside its AI PHOTOSHOP tab (?embed=1&tool=pdf), without header, menu or footer. */
+/* Embedded mode: the main site shows this page inside its AI Studio tab (?embed=1&tool=pdf), without header, menu or footer. */
 try{if(/[?&]embed=1/.test(location.search)&&window.parent!==window){var d=document.documentElement;d.className+=' emb';
 var pd=parent.document.documentElement,sync=function(){var t=pd.getAttribute('data-theme');if(t==='dark'||t==='light')d.setAttribute('data-theme',t)};sync();new MutationObserver(sync).observe(pd,{attributes:true,attributeFilter:['data-theme']})}}catch(e){}
 </script>
@@ -52,7 +52,7 @@ footer{border-top:1px solid var(--ln);padding:14px 20px;font-size:12px;color:var
  <button id="bTheme" class="ic" type="button" title="Toggle light/dark theme" aria-label="Toggle light and dark theme">&#9680;</button>
 </header>
 <nav class="vtabs" aria-label="Sections">
- <a href="./">NEWS PORTAL</a><a href="./">STOCK SCREENER</a><a href="./#calc">CALCULATORS</a><a href="./ai-photoshop.html" class="on" aria-current="page">AI PHOTOSHOP</a>
+ <a href="./">MARKET NEWS</a><a href="./">STOCK SCREENER</a><a href="./#calc">FINANCIAL TOOLS</a><a href="./ai-photoshop.html" class="on" aria-current="page">AI STUDIO</a>
 </nav>
 <main id="maincontent">
 <style>
@@ -138,8 +138,8 @@ footer{border-top:1px solid var(--ln);padding:14px 20px;font-size:12px;color:var
 #aiph #enPos{width:100%;accent-color:var(--ac);margin:10px 0 0;min-height:26px}
 #aiph .encap{margin-top:8px;font-size:12px;color:var(--mu);overflow-wrap:anywhere}
 </style>
-<section id="aiph" aria-label="AI Photoshop">
- <div class="aitools" role="group" aria-label="AI Photoshop tools">
+<section id="aiph" aria-label="AI Studio">
+ <div class="aitools" role="group" aria-label="AI Studio tools">
   <button type="button" class="aitool on" data-ait="bg" aria-pressed="true">Remove Background</button>
   <button type="button" class="aitool" data-ait="en" aria-pressed="false">Unblur &amp; Enhance</button>
   <button type="button" class="aitool" data-ait="pass" aria-pressed="false">Passport Photo</button>
@@ -312,7 +312,7 @@ footer{border-top:1px solid var(--ln);padding:14px 20px;font-size:12px;color:var
     <span><i style="border-color:#1d4ed8;border-top-style:dashed"></i>Centre line</span>
     <span><i class="tn"></i>Keep background plain white (outside the dashed safe area)</span>
    </div>
-   <div class="encap">Drag the photo to move it. Zoom with the slider, mouse wheel or by pinching. Put the top of the head on the red line and the chin inside the green zone. Photos with a transparent background (for example from <b>AI Photoshop &rarr; Remove Background</b>) get a white background automatically.</div>
+   <div class="encap">Drag the photo to move it. Zoom with the slider, mouse wheel or by pinching. Put the top of the head on the red line and the chin inside the green zone. Photos with a transparent background (for example from <b>AI Studio &rarr; Remove Background</b>) get a white background automatically.</div>
   </div>
 
   <!-- 3. SIZE + ADJUSTMENTS -->
@@ -1441,7 +1441,7 @@ function checkBackground() {
   var lo = Math.min(mr, mg, mb), hi = Math.max(mr, mg, mb), ok = lo >= BG_WHITE_MIN && hi - lo <= BG_SPREAD_MAX && sd <= BG_STD_MAX;
   var text = ok ? 'Background check: the top corners look plain white or very light. Good.'
     : 'Background check: the top corners are not plain white (average colour rgb(' + Math.round(mr) + ', ' + Math.round(mg) + ', ' + Math.round(mb) + (sd > BG_STD_MAX ? ', not plain' : '') +
-      ')). Use a white wall, or remove the background first (AI Photoshop > Remove Background) and upload that PNG here.';
+      ')). Use a white wall, or remove the background first (AI Studio > Remove Background) and upload that PNG here.';
   if (text !== lastBg) { lastBg = text; el.bg.textContent = text; el.bg.className = 'bgstat ' + (ok ? 'ok' : 'bad'); }
 }
 
@@ -1828,11 +1828,9 @@ function pdfLoad(hash) {
   var fr = document.getElementById('pdfFrame'), src = document.getElementById('pdfToolsApp');
   if (!fr || !src) return;
   var html = src.textContent.replace(/<\\\/script/g, '</script');
-  var old = pdfUrl;
   if (hash) html = html.replace('<head>', '<head><script>window.__PDF_ROUTE=' + JSON.stringify(hash) + ';<\/script>');
-  pdfUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
-  fr.setAttribute('src', pdfUrl);
-  if (old) setTimeout(function () { try { URL.revokeObjectURL(old); } catch (e) {} }, 3000);
+  /* inline srcdoc (not a blob: link): some browsers, extensions and office policies show "This content is blocked" for blob frames */
+  fr.removeAttribute('src'); fr.srcdoc = html;
 }
 /* each PDF tool starts clean: the app asks for a fresh load when you switch tools */
 window.addEventListener('message', function (e) {
