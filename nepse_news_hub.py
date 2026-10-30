@@ -2362,6 +2362,27 @@ CALCULATORS_BLOCK = r'''<style>
 #calc .cwarn{margin:8px 0}
 #calc details.rules{margin:0 0 12px;background:var(--p);border:1px solid var(--ln);border-radius:8px;padding:8px 14px}#calc details.rules .rg{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:4px 10px;margin-top:10px}
 #calc details.rules table input{width:110px;min-height:32px}
+/* Nepali Text Converter */
+@font-face{font-family:"NC Preeti";src:local("Preeti"),local("Preeti Normal"),local("PCS NEPALI"),local("Preeti Regular");font-display:swap}
+#calc .nc .cgrid{margin-top:2px}
+#calc .nc-pane{min-width:0}
+#calc .nc-ta{display:block;width:100%;min-height:220px;resize:vertical;background:var(--p);color:var(--tx);border:1px solid var(--ln);border-radius:6px;padding:10px 12px;font-size:15px;line-height:1.65;box-sizing:border-box;overflow-wrap:anywhere}
+#calc .nc-ta[readonly]{background:var(--ch)}
+#calc .nc-ta:focus-visible{outline:2px solid var(--ac);outline-offset:1px}
+#calc .nc-dev{font-family:"Noto Sans Devanagari","Nirmala UI","Mangal","Kohinoor Devanagari","Segoe UI",sans-serif}
+#calc .nc-pre{font-family:"NC Preeti","Preeti","PCS NEPALI",ui-monospace,Consolas,"Courier New",monospace;font-size:16px}
+#calc .nc-lat{font-family:inherit}
+#calc .nc-cnt{margin-top:4px;font-size:11px;color:var(--mu);font-variant-numeric:tabular-nums;white-space:pre}
+#calc .nc-act{align-items:center}
+#calc .nc-act .cbtn{min-width:76px}
+#calc .nc-keep{margin:0 0 0 4px;font-weight:400;font-size:12px}
+#calc .nc-msg{font-size:12px;color:var(--ok);min-height:1em}
+#calc .nc-note{margin:10px 0 0}
+#calc #nc_warn{margin:10px 0 0}
+#calc .nc-sp{margin-top:12px}
+#calc .nc-sp .chip{font-size:16px;min-width:40px;min-height:36px}
+@media(max-width:520px){#calc .nc-act .cbtn{flex:1 1 30%}#calc .nc-ta{min-height:170px}}
+#calc .nc-act [hidden]{display:none!important}
 </style>
 <nav class="vtabs sub" id="calc-nav" aria-label="Calculators" hidden></nav>
 <section id="calc" hidden aria-label="Calculators"><div id="calc-body"></div></section>
@@ -2654,6 +2675,294 @@ CALCULATORS_BLOCK = r'''<style>
     return { ok: true, english: en, nepali: ne + ' मात्र', formatted: fig, formattedNe: toNeDigits(fig), rupees: r, paisa: paisa };
   }
   return { convert: convert, MAX_DIGITS: MAX_DIGITS };
+});
+
+/* ===== Nepali Text Converter engine (Preeti <-> Unicode, Roman -> Nepali). Pure functions, runs locally. Source of truth: nepali_converter.js ===== */
+/* NEPALI TEXT CONVERTER ENGINE  (no DOM, no network, no dependencies)
+ *
+ *   NepaliConv.preetiToUnicode(text)            -> string
+ *   NepaliConv.unicodeToPreeti(text)            -> { text, unsupported: [chars] }
+ *   NepaliConv.romanToUnicode(text, {keepEnglish}) -> string
+ *   NepaliConv.hasDevanagari(text)              -> boolean
+ *   NepaliConv.count(text)                      -> { chars, words }
+ *
+ * Preeti is a legacy font encoding: every ASCII key stands for a glyph, and some glyphs are positional
+ * (i-kar is typed BEFORE the consonant, reph is typed AFTER it, half letters are separate keys).
+ * So Preeti -> Unicode is a character map followed by an ordered set of re-ordering rules, not a plain replace.
+ * Works in browsers (window.NepaliConv) and in Node (module.exports).
+ */
+(function (root, factory) {
+  var api = factory();
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.NepaliConv = api;
+})(typeof window !== 'undefined' ? window : this, function () {
+'use strict';
+
+var HAL = '्', ZWJ = '‍', ZWNJ = '‌', NUKTA = '़';
+var MARK = '';                      // private-use placeholder for the Preeti reph key "{"
+var MAT = 'ािीुूृेैोौंःँ';   // ा ि ी ु ू ृ े ै ो ौ ं ः ँ
+var BASE = '[\\u0904-\\u0939\\u0958-\\u095F\\u093D]';                                          // letters a cluster is made of
+var CLUSTER = '(?:' + BASE + HAL + ')*' + BASE;
+
+/* ---------------------------------------------------------------------------------------------
+   1. PREETI -> UNICODE
+   --------------------------------------------------------------------------------------------- */
+var PMAP = {
+  '0': 'ण्', '1': 'ज्ञ', '2': 'द्द', '3': 'घ', '4': 'द्ध', '5': 'छ', '6': 'ट', '7': 'ठ', '8': 'ड', '9': 'ढ',
+  '`': 'ञ', '~': 'ञ्', '!': '१', '@': '२', '#': '३', '$': '४', '%': '५', '^': '६', '&': '७', '*': '८', '(': '९', ')': '०',
+  '-': '(', '_': ')', '=': '.', '+': 'ं',
+  'q': 'त्र', 'w': 'ध', 'e': 'भ', 'r': 'च', 't': 'त', 'y': 'थ', 'u': 'ग', 'i': 'ष्', 'o': 'य', 'p': 'उ', '[': 'ृ', ']': 'े', '\\': '्', '|': '्र',
+  'Q': 'त्त', 'W': 'ध्', 'E': 'भ्', 'R': 'च्', 'T': 'त्', 'Y': 'थ्', 'U': 'ग्', 'I': 'क्ष्', 'O': 'इ', 'P': 'ए', '{': MARK, '}': 'ै',
+  'a': 'ब', 's': 'क', 'd': 'म', 'f': 'ा', 'g': 'न', 'h': 'ज', 'j': 'व', 'k': 'प', 'l': 'ि', ';': 'स', "'": 'ु',
+  'A': 'ब्', 'S': 'क्', 'D': 'म्', 'F': 'ँ', 'G': 'न्', 'H': 'ज्', 'J': 'व्', 'K': 'प्', 'L': 'ी', ':': 'स्', '"': 'ू',
+  'z': 'श', 'x': 'ह', 'c': 'अ', 'v': 'ख', 'b': 'द', 'n': 'ल', 'm': 'फ', ',': ',', '.': '।', '/': 'र',
+  'Z': 'श्', 'X': 'ह्', 'C': 'ऋ', 'V': 'ख्', 'B': 'द्य', 'N': 'ल्', 'M': 'ः', '<': '?', '>': 'श्र', '?': 'रु',
+  // extended (Latin-1 / Windows-1252 range) glyphs of the Preeti font
+  '„': 'ध्र', '…': '‘', 'ˆ': 'फ्', '‰': 'झ्', '‹': 'ङ्घ', '‘': 'ॅ', '•': 'ड्ड',
+  '˜': 'ऽ', '›': 'द्र', '¡': 'ज्ञ्', '¢': 'द्घ', '£': 'घ्', '¤': 'झ्', '¥': 'र्' + ZWJ,
+  '§': 'ट्ट', '©': 'र', 'ª': 'ङ', '«': '्र', '°': 'ङ्ढ', '±': '+', '´': 'झ', '¶': 'ठ्ठ',
+  '¿': 'रू', 'Å': 'हृ', 'Æ': '”', 'Ë': 'ङ्ग', 'Ì': 'न्न', 'Í': 'ङ्क', 'Î': 'ङ्ख',
+  'Ò': '¨', 'Ö': '=', '×': '×', 'Ø': '्य', 'Ù': ';', 'Ú': '’', 'Û': '!',
+  'Ü': '%', 'Ý': 'ट्ठ', 'ß': 'द्म', 'å': 'द्व', 'æ': '“', 'ç': 'ॐ', '÷': '/', 'ì': 'त्त्'
+};
+
+var RE_NUMERIC = /^[0-9]+(?:[.,][0-9]+)*$/;                         // plain numbers are not Preeti letters
+var RE_IKAR = new RegExp('ि((?:[^' + HAL + ']' + HAL + ')*[^' + HAL + '])', 'g');
+var RE_REPH = new RegExp('((?:' + BASE + HAL + ')*' + BASE + '[' + MAT + ']*)' + MARK, 'g');
+var RE_MAT_BEFORE_HAL = new RegExp('([' + MAT + ']+)(' + HAL + '(?:' + BASE + HAL + ')*' + BASE + ')', 'g');
+var RE_HAL_MAT = new RegExp(HAL + '([' + MAT + ']+)((?:' + BASE + HAL + ')*' + BASE + ')', 'g');
+var RE_ANUSVARA = /([ँं])([ा-ौः]*)/g;
+var RE_DUP = /([ा-ौँ-ः])\1+/g;
+
+function preetiToken(tok) {
+  if (RE_NUMERIC.test(tok)) return tok;
+  var s = '', i, ch;
+  for (i = 0; i < tok.length; i++) { ch = tok.charAt(i); s += Object.prototype.hasOwnProperty.call(PMAP, ch) ? PMAP[ch] : ch; }
+  s = s.split(HAL + 'ा').join('');                  // halant + aa is how Preeti spells ष, ण, क्ष ("if", "0f", "If")
+  s = s.split('उफ').join('ऊ');            // p + m  -> ऊ
+  s = s.split('भफ').join('झ');            // e + m  -> झ
+  s = s.split('इ' + MARK).join('ई');           // O + {  -> ई
+  s = s.replace(RE_IKAR, '$1ि');                    // i-kar is typed before the cluster, belongs after it
+  s = s.replace(RE_REPH, 'र' + HAL + '$1');         // reph is typed after the syllable, belongs before the cluster
+  s = s.split(MARK).join('र' + HAL);
+  s = s.replace(RE_MAT_BEFORE_HAL, '$2$1');              // vowel sign typed before a rakar / half cluster
+  s = s.replace(RE_HAL_MAT, HAL + '$2$1');               // vowel sign typed between halant and next consonant
+  s = s.replace(RE_ANUSVARA, '$2$1');                    // anusvara / chandrabindu go last
+  s = s.replace(RE_DUP, '$1');
+  s = s.split('ेा').join('ाे').split('ैा').join('ाै');
+  s = s.split('अाे').join('ओ').split('अाै').join('औ').split('अा').join('आ');
+  s = s.split('एे').join('ऐ');
+  s = s.split('ाे').join('ो').split('ाै').join('ौ');   // aa + e / ai -> o / au
+  if (s.charAt(0) === 'ः') s = ':' + s.slice(1);                                 // a leading "M" is a colon
+  return s;
+}
+
+function preetiToUnicode(text) {
+  text = String(text == null ? '' : text);
+  if (!text) return '';
+  var parts = text.split(/(\s+)/), out = new Array(parts.length), i, p;
+  for (i = 0; i < parts.length; i++) { p = parts[i]; out[i] = (!p || /^\s+$/.test(p)) ? p : preetiToken(p); }
+  var r = out.join('');
+  return r.normalize ? r.normalize('NFC') : r;
+}
+
+/* ---------------------------------------------------------------------------------------------
+   2. UNICODE -> PREETI
+   --------------------------------------------------------------------------------------------- */
+var FULLK = { 'क': 's', 'ख': 'v', 'ग': 'u', 'घ': '3', 'ङ': 'ª', 'च': 'r', 'छ': '5', 'ज': 'h', 'झ': '´', 'ञ': '`', 'ट': '6', 'ठ': '7', 'ड': '8', 'ढ': '9',
+  'ण': '0f', 'त': 't', 'थ': 'y', 'द': 'b', 'ध': 'w', 'न': 'g', 'प': 'k', 'फ': 'm', 'ब': 'a', 'भ': 'e', 'म': 'd', 'य': 'o', 'र': '/', 'ल': 'n', 'व': 'j',
+  'श': 'z', 'ष': 'if', 'स': ';', 'ह': 'x' };
+var HALFK = { 'क': 'S', 'ख': 'V', 'ग': 'U', 'घ': '£', 'च': 'R', 'ज': 'H', 'झ': '¤', 'ञ': '~', 'ण': '0', 'त': 'T', 'थ': 'Y', 'ध': 'W', 'न': 'G', 'प': 'K',
+  'फ': 'ˆ', 'ब': 'A', 'भ': 'E', 'म': 'D', 'ल': 'N', 'व': 'J', 'श': 'Z', 'ष': 'i', 'स': ':', 'ह': 'X' };
+var LIG = {}, LIGHALF = {};
+function lig(a, b, key) { LIG[a + HAL + b] = key; }
+lig('ज', 'ञ', '1'); lig('त', 'र', 'q'); lig('श', 'र', '>'); lig('त', 'त', 'Q'); lig('द', 'द', '2'); lig('द', 'ध', '4'); lig('द', 'य', 'B');
+lig('द', 'म', '\u00df'); lig('द', 'व', '\u00e5'); lig('ङ', 'ग', '\u00cb'); lig('ङ', 'क', '\u00cd'); lig('ङ', 'ख', '\u00ce'); lig('न', 'न', '\u00cc');
+lig('ट', 'ट', '\u00a7'); lig('ट', 'ठ', '\u00dd'); lig('ठ', 'ठ', '\u00b6'); lig('ड', 'ड', '\u2022'); lig('ङ', 'घ', '\u2039'); lig('द', 'घ', '\u00a2');
+lig('क', 'ष', 'If');
+LIGHALF['क' + HAL + 'ष'] = 'I'; LIGHALF['ज' + HAL + 'ञ'] = '\u00a1';
+var INDEP = { 'अ': 'c', 'आ': 'cf', 'इ': 'O', 'ई': 'O{', 'उ': 'p', 'ऊ': 'pm', 'ऋ': 'C', 'ए': 'P', 'ऐ': 'P]', 'ओ': 'cf]', 'औ': 'cf}', 'ॐ': 'ç', 'ऽ': '˜' };
+var SIGN = { 'ा': 'f', 'ी': 'L', 'ु': "'", 'ू': '"', 'ृ': '[', 'े': ']', 'ै': '}', 'ो': 'f]', 'ौ': 'f}',
+  'ं': '+', 'ँ': 'F', 'ः': 'M' };
+var DIGITS = ')!@#$%^&*(';
+var PUNCT = { '(': '-', ')': '_', '.': '=', '?': '<', '+': '±', '/': '÷', ';': 'Ù', '!': 'Û', '%': 'Ü', '=': 'Ö', ':': 'M',
+  '-': '–', '‘': '…', '’': 'Ú', '“': 'æ', '”': 'Æ', '।': '.', '॥': '..' };
+
+function isCons(ch) { return !!ch && /[क-हक़-य़]/.test(ch); }
+function full(c) { return Object.prototype.hasOwnProperty.call(FULLK, c) ? FULLK[c] : null; }
+function half(c) { return Object.prototype.hasOwnProperty.call(HALFK, c) ? HALFK[c] : (full(c) + '\\'); }
+
+function emitCluster(cs, endHalant) {
+  var out = '', n = cs.length, i = 0, c, pair, lastPair, nx;
+  while (i < n) {
+    c = cs[i];
+    if (i === n - 1) { out += endHalant ? half(c) : full(c); i++; continue; }
+    nx = cs[i + 1]; pair = c + HAL + nx; lastPair = (i + 1 === n - 1);
+    if (lastPair && !endHalant && LIG[pair]) { out += LIG[pair]; i += 2; continue; }
+    if (LIGHALF[pair]) { out += LIGHALF[pair]; i += 2; continue; }
+    if (lastPair && !endHalant && nx === 'र') { out += full(c) + '|'; i += 2; continue; }                       // rakar
+    if (lastPair && !endHalant && nx === 'य' && !HALFK[c]) { out += full(c) + 'Ø'; i += 2; continue; }      // yakar on a letter with no half form
+    out += half(c); i++;
+  }
+  return out;
+}
+
+function unicodeToPreeti(text) {
+  text = String(text == null ? '' : text);
+  var s = text.normalize ? text.normalize('NFC') : text, out = '', i = 0, n = s.length, unsupported = [], seen = {};
+  function bad(ch) { if (!seen[ch]) { seen[ch] = 1; unsupported.push(ch); } }
+  function nextCons(j) { var c = s.charAt(j); if (!isCons(c)) return null; return c; }
+  while (i < n) {
+    var ch = s.charAt(i), j, k, cs, reph, ikar, endHalant, signs, c2, prev, cc;
+    // eyelash ra:  र + ् + ZWJ
+    if (ch === 'र' && s.charAt(i + 1) === HAL && s.charAt(i + 2) === ZWJ) { out += '¥'; i += 3; continue; }
+    if (isCons(ch)) {
+      reph = false;
+      if (ch === 'र' && s.charAt(i + 1) === HAL && isCons(s.charAt(i + 2)) && s.charAt(i + 3) !== NUKTA) { reph = true; i += 2; ch = s.charAt(i); }
+      cs = []; j = i;
+      while (true) {
+        cc = s.charAt(j);
+        if (!full(cc)) { bad(cc); }
+        cs.push(cc); j++;
+        if (s.charAt(j) === NUKTA) { bad(NUKTA); j++; }
+        if (s.charAt(j) === HAL && isCons(s.charAt(j + 1))) { j++; continue; }
+        break;
+      }
+      endHalant = false;
+      if (s.charAt(j) === HAL) { endHalant = true; j++; if (s.charAt(j) === ZWNJ || s.charAt(j) === ZWJ) j++; }
+      ikar = false; signs = '';
+      while (j < n && MAT.indexOf(s.charAt(j)) >= 0) {
+        c2 = s.charAt(j);
+        if (c2 === 'ि') ikar = true; else signs += SIGN[c2];
+        j++;
+      }
+      // cluster letters that have no Preeti glyph are passed through unchanged (and reported)
+      var body = '';
+      for (k = 0; k < cs.length; k++) if (!full(cs[k])) { body = null; break; }
+      body = body === null ? cs.join('') : emitCluster(cs, endHalant);
+      out += (ikar ? 'l' : '') + body + signs + (reph ? '{' : '');
+      i = j; continue;
+    }
+    if (Object.prototype.hasOwnProperty.call(INDEP, ch)) {
+      out += INDEP[ch]; i++;
+      while (i < n && (s.charAt(i) === 'ं' || s.charAt(i) === 'ँ' || s.charAt(i) === 'ः')) { out += SIGN[s.charAt(i)]; i++; }
+      continue;
+    }
+    if (ch >= '०' && ch <= '९') { out += DIGITS.charAt(ch.charCodeAt(0) - 0x0966); i++; continue; }
+    if (ch === ZWJ || ch === ZWNJ || ch === NUKTA) { i++; continue; }
+    if (ch === '"' || ch === "'") {                                           // straight quotes: guess opening / closing
+      prev = i === 0 ? ' ' : s.charAt(i - 1);
+      var opening = /[\s(\[{—–-]/.test(prev) || i === 0;
+      out += ch === '"' ? (opening ? 'æ' : 'Æ') : (opening ? '…' : 'Ú'); i++; continue;
+    }
+    if (Object.prototype.hasOwnProperty.call(PUNCT, ch)) { out += PUNCT[ch]; i++; continue; }
+    if (ch >= 'ऀ' && ch <= 'ॿ') { bad(ch); out += ch; i++; continue; }     // a Devanagari character Preeti cannot represent
+    out += ch; i++;
+  }
+  return { text: out, unsupported: unsupported };
+}
+
+/* ---------------------------------------------------------------------------------------------
+   3. ROMAN -> NEPALI UNICODE  (practical transliteration, not a translator)
+   Order of decisions for each Latin word:  {braces} kept as typed  >  ALL-CAPS kept  >  Nepali word list
+   >  common English word kept  >  phonetic transliteration.
+   --------------------------------------------------------------------------------------------- */
+var NEPALI_WORDS = {};
+(function (src) {
+  src.split(/\s+/).forEach(function (pair) { var k = pair.indexOf('='); if (k > 0) NEPALI_WORDS[pair.slice(0, k)] = pair.slice(k + 1); });
+})(
+  'ma=म mero=मेरो mera=मेरा meri=मेरी hami=हामी hamro=हाम्रो hamilai=हामीलाई timi=तिमी timro=तिम्रो timilai=तिमीलाई tapai=तपाईं tapaiko=तपाईंको tapailai=तपाईंलाई ' +
+  'uni=उनी unko=उनको usko=उसको yo=यो tyo=त्यो yaha=यहाँ yahan=यहाँ tyaha=त्यहाँ ko=को ka=का ki=की lai=लाई le=ले ra=र ani=अनि tara=तर ya=या pani=पनि ni=नि ta=त ' +
+  'ho=हो hoina=होइन hun=हुन् hunu=हुनु huncha=हुन्छ hunchha=हुन्छ hunuhos=हुनुहोस् thiyo=थियो thiye=थिए cha=छ chha=छ xa=छ chhan=छन् chan=छन् chu=छु chhu=छु ' +
+  'chaina=छैन chhaina=छैन xaina=छैन garnu=गर्नु garne=गर्ने garyo=गर्यो garera=गरेर gareko=गरेको garchu=गर्छु garchhu=गर्छु garcha=गर्छ garchha=गर्छ ' +
+  'garnuhos=गर्नुहोस् gara=गर bhayo=भयो bhae=भए bhaeko=भएको bhane=भने bhanera=भनेर bhanyo=भन्यो bhannu=भन्नु ' +
+  'aaja=आज aja=आज bholi=भोलि hijo=हिजो ahile=अहिले aba=अब pachi=पछि pahila=पहिला pahile=पहिले sadhai=सधैं dherai=धेरै thorai=थोरै sabai=सबै kehi=केही ' +
+  'ke=के kasto=कस्तो kina=किन kaha=कहाँ kahan=कहाँ kahile=कहिले kati=कति kasari=कसरी kun=कुन ramro=राम्रो naramro=नराम्रो thulo=ठूलो sano=सानो naya=नयाँ purano=पुरानो ' +
+  'nam=नाम naam=नाम desh=देश nepal=नेपाल nepali=नेपाली kathmandu=काठमाडौं namaste=नमस्ते dhanyabad=धन्यवाद dhanyavad=धन्यवाद swagat=स्वागत shubha=शुभ subha=शुभ ' +
+  'shubhakamana=शुभकामना subhakamana=शुभकामना kripaya=कृपया maaf=माफ mitra=मित्र sathi=साथी saathi=साथी ghar=घर kaam=काम paisa=पैसा rupaiya=रुपैयाँ rupee=रुपैयाँ ' +
+  'bank=बैंक share=शेयर shares=शेयर market=मार्केट bazar=बजार kharid=खरिद bikri=बिक्री labh=लाभ nafa=नाफा nokshan=नोक्सान lagani=लगानी bonus=बोनस dividend=डिभिडेन्ड ' +
+  'portfolio=पोर्टफोलियो nepse=नेप्से sebon=सेबोन gyan=ज्ञान sansar=संसार kitab=किताब pustak=पुस्तक vidyalaya=विद्यालय bidyalaya=विद्यालय school=स्कुल ' +
+  'dinu=दिनु diyo=दियो linu=लिनु liyo=लियो jaanu=जानु janu=जानु gayo=गयो aaunu=आउनु aayo=आयो aaucha=आउँछ auncha=आउँछ ' +
+  'ek=एक dui=दुई teen=तीन char=चार paanch=पाँच panch=पाँच saat=सात aath=आठ nau=नौ das=दश prabhu=प्रभु binjal=बिनजल halwai=हलवाई'
+);
+
+var ENGLISH = {};
+('a an the and or but if so as is are was were be been am do does did done have has had having will would can could shall should may might must not no yes ok okay ' +
+ 'i you he she we they it me him her us them my your his its our their this that these those here there where when what which who whom why how all any some more most ' +
+ 'very much many few other another each every both either neither only just also too then than now today tomorrow yesterday tonight morning evening night week month year ' +
+ 'to of in on at for with from by about into over under after before between through during without within up down out off again further once ' +
+ 'hello hi hey thanks thank please sorry welcome regards dear sir madam team office meeting meet call phone mobile email mail send sent receive received ' +
+ 'ready pending complete completed approve approved reject rejected check checked verify verified update updated open close closed start end begin finish ' +
+ 'report reports file files folder data excel word pdf sheet table list form page link website web online internet app software system server user users client clients ' +
+ 'account accounts balance amount total number price prices value rate rates cost fee fees charge charges tax profit loss gain return returns risk ' +
+ 'buy sell hold order orders trade trading stock stocks fund funds investment investments investor investors broker brokers demat depat ' +
+ 'new old good bad best better big small high low first last next previous time date day days name address contact detail details note notes ' +
+ 'work works working job task tasks plan project process service services department manager officer staff company business ' +
+ 'make made get got give gave take took see saw know knew think thought want need needs use used using go going gone come came say said tell told ask asked ' +
+ 'one two three four five six seven eight nine ten hundred thousand million lakh crore ' +
+ 'with without please kindly regarding attached attachment enclosed reference subject').split(/\s+/).forEach(function (w) { if (w) ENGLISH[w] = 1; });
+['share', 'shares', 'market', 'bank', 'bonus', 'dividend', 'portfolio', 'school', 'ek', 'char', 'das', 'nam', 'ho', 'ra', 'ni', 'ta', 'ko', 'ka', 'ki', 'ya', 'le', 'ke', 'gara', 'chu', 'cha']
+  .forEach(function (w) { delete ENGLISH[w]; });
+
+// Roman tokens: [pattern, independent letter, vowel sign]  (longest first)
+var R_VOWELS = [['aa', 'आ', 'ा'], ['ai', 'ऐ', 'ै'], ['au', 'औ', 'ौ'], ['ii', 'ई', 'ी'], ['ee', 'ई', 'ी'], ['uu', 'ऊ', 'ू'], ['oo', 'ऊ', 'ू'],
+  ['a', 'अ', ''], ['i', 'इ', 'ि'], ['u', 'उ', 'ु'], ['e', 'ए', 'े'], ['o', 'ओ', 'ो']];
+var R_CONS = [['ngh', 'ङ्घ'], ['ksh', 'क्ष'], ['chh', 'छ'], ['Thh', 'ठ'], ['Dhh', 'ढ'],
+  ['ng', 'ङ्ग'], ['gy', 'ज्ञ'], ['kh', 'ख'], ['gh', 'घ'], ['ch', 'च'], ['jh', 'झ'], ['th', 'थ'], ['dh', 'ध'], ['ph', 'फ'], ['bh', 'भ'], ['sh', 'श'],
+  ['Th', 'ठ'], ['Dh', 'ढ'], ['T', 'ट'], ['D', 'ड'], ['N', 'ण'], ['S', 'ष'],
+  ['k', 'क'], ['g', 'ग'], ['c', 'क'], ['j', 'ज'], ['t', 'त'], ['d', 'द'], ['n', 'न'], ['p', 'प'], ['f', 'फ'], ['b', 'ब'], ['m', 'म'], ['y', 'य'],
+  ['r', 'र'], ['l', 'ल'], ['v', 'व'], ['w', 'व'], ['s', 'स'], ['h', 'ह'], ['q', 'क'], ['x', 'क्स'], ['z', 'ज']];
+
+function transliterate(word) {
+  var itrans = /[a-z][A-Z]/.test(word) || /^[A-Z][a-z]*[A-Z]/.test(word);        // inner capitals: T D N S mean retro-flex letters
+  var w = itrans ? word : word.toLowerCase(), out = '', state = 'start', i = 0, k, hit, p;
+  while (i < w.length) {
+    hit = null;
+    for (k = 0; k < R_VOWELS.length && !hit; k++) { p = R_VOWELS[k][0]; if (w.substr(i, p.length) === p) hit = { v: R_VOWELS[k], len: p.length }; }
+    if (hit) {
+      out += (state === 'cons') ? hit.v[2] : hit.v[1];
+      state = 'vowel'; i += hit.len; continue;
+    }
+    for (k = 0; k < R_CONS.length && !hit; k++) { p = R_CONS[k][0]; if (w.substr(i, p.length) === p) hit = { c: R_CONS[k][1], len: p.length }; }
+    if (hit) {
+      if (state === 'cons') out += HAL;
+      out += hit.c; state = 'cons'; i += hit.len; continue;
+    }
+    out += w.charAt(i); state = 'start'; i++;
+  }
+  return out;
+}
+
+function romanToUnicode(text, opts) {
+  text = String(text == null ? '' : text);
+  var keepEnglish = !(opts && opts.keepEnglish === false), lastNepali = false;
+  return text.replace(/\{([^{}\n]*)\}|[A-Za-z][A-Za-z']*|\|\||\||\.(?=\s|$)/g, function (m, braced) {
+    if (braced !== undefined) { lastNepali = false; return braced; }
+    if (m === '||') { lastNepali = false; return '॥'; }
+    if (m === '|') { lastNepali = false; return '।'; }
+    if (m === '.') { var r = lastNepali ? '।' : '.'; lastNepali = false; return r; }
+    var lw = m.toLowerCase();
+    if (m.indexOf("'") >= 0) { lastNepali = false; return m; }
+    if (m.length > 1 && m === m.toUpperCase()) { lastNepali = false; return m; }               // PMS, NEPSE, KYC ...
+    var itr = /[a-z][A-Z]/.test(m);
+    if (!itr && Object.prototype.hasOwnProperty.call(NEPALI_WORDS, lw)) { lastNepali = true; return NEPALI_WORDS[lw]; }
+    if (keepEnglish && !itr && ENGLISH[lw]) { lastNepali = false; return m; }
+    if (m.length === 1 && lw === 'i') { lastNepali = false; return m; }
+    lastNepali = true; return transliterate(m);
+  });
+}
+
+/* ---------------------------------------------------------------------------------------------
+   4. helpers
+   --------------------------------------------------------------------------------------------- */
+function hasDevanagari(text) { return /[ऀ-ॿ]/.test(String(text || '')); }
+function count(text) {
+  text = String(text || '');
+  var t = text.trim();
+  return { chars: text.length, words: t ? t.split(/\s+/).length : 0 };
+}
+
+return { preetiToUnicode: preetiToUnicode, unicodeToPreeti: unicodeToPreeti, romanToUnicode: romanToUnicode, hasDevanagari: hasDevanagari, count: count,
+  _maps: { PMAP: PMAP, FULLK: FULLK, HALFK: HALFK, NEPALI_WORDS: NEPALI_WORDS } };
 });
 
 /* ===== NNH calculator engines: pure functions, no DOM. Rates live in one place (RATES). ===== */
@@ -3840,6 +4149,87 @@ reg('conv', {
   notes: '<p>Up to 15 digits (99 neel), rounded to the nearest paisa. Always read the words back before using them on a cheque or legal document, and check the Nepali spelling against your organisation\u2019s standard.</p>'
 });
 
+/* NEPALI TEXT CONVERTER (custom). Engine: window.NepaliConv. Everything runs in the browser: no network, nothing stored. */
+CALCS.push({ id: 'nepali-converter', group: 'conv', name: 'Nepali Text Converter', blurb: 'Preeti ⇄ Unicode and Roman → Nepali Unicode, converted live in your browser.',
+  render: function (el) {
+    var NC = window.NepaliConv;
+    if (!NC) { el.innerHTML = '<div class="cerr" role="alert">The Nepali converter engine did not load. Reload the page and try again.</div>'; return; }
+    var MODES = {
+      p2u: { tab: 'PREETI → UNICODE', inL: 'PREETI INPUT', outL: 'UNICODE OUTPUT', ph: 'Paste or type Preeti encoded Nepali text here...', inF: 'nc-pre', outF: 'nc-dev', outLang: 'ne',
+        note: 'Preeti letters are converted with the standard Preeti keyboard layout. English words typed inside a Preeti document look like Preeti letters, so convert only the Preeti parts. Numbers on their own are left as they are.' },
+      u2p: { tab: 'UNICODE → PREETI', inL: 'UNICODE INPUT', outL: 'PREETI OUTPUT', ph: 'Paste or type Unicode Nepali text here...', inF: 'nc-dev', outF: 'nc-pre', outLang: 'en',
+        note: 'Preeti is a legacy font encoding. The copied text looks like English characters (for example g]kfn) until the Preeti font is applied in the destination application, such as Word or Photoshop. Latin letters and digits in the input are left as they are.' },
+      r2u: { tab: 'ROMAN → UNICODE', inL: 'ROMAN INPUT', outL: 'UNICODE OUTPUT', ph: 'Type Romanized Nepali here, for example: mero naam binjal ho', inF: 'nc-lat', outF: 'nc-dev', outLang: 'ne',
+        note: 'Type as you speak: aa = ा, ii = ी, uu = ू, ai, au. Use aa for a long vowel (naam = नाम). ALL-CAPS words, common English words and anything in {curly braces} stay as typed. This is a practical transliteration, not a translator, so check the spelling of names.' }
+    };
+    var SPECIAL = ['र्‍य', 'र्‍', 'ऋ', 'ॠ', 'ङ', 'ञ', 'क्ष', 'ज्ञ', 'ॐ', 'ण', '।', '॥', 'ँ', 'ं', 'ः'];
+    var mode = 'p2u', inputs = { p2u: '', u2p: '', r2u: '' }, timer = null, msgTimer = null, lastOut = '';
+    el.innerHTML = '<div class="chead"><h2>Nepali Text Converter</h2><p>Convert old Preeti text to Unicode and back, or type Nepali in Roman letters. Conversion happens as you type and runs only in your browser.</p></div>' +
+      '<div class="cc nc"><div class="seg" role="group" aria-label="Conversion type">' + Object.keys(MODES).map(function (k) { return '<button type="button" class="chip" data-m="' + k + '" aria-pressed="false">' + MODES[k].tab + '</button>'; }).join('') + '</div>' +
+      '<div class="cgrid even">' +
+      '<div class="nc-pane"><label for="nc_in" id="nc_inl"></label><textarea id="nc_in" class="nc-ta" rows="10" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off"></textarea><div class="nc-cnt" id="nc_ci" aria-live="off"></div></div>' +
+      '<div class="nc-pane"><label for="nc_out" id="nc_outl"></label><textarea id="nc_out" class="nc-ta" rows="10" readonly spellcheck="false"></textarea><div class="nc-cnt" id="nc_co" aria-live="off"></div></div></div>' +
+      '<div class="cact nc-act"><button type="button" class="cbtn" id="nc_copy" aria-label="Copy converted text">COPY</button><button type="button" class="cbtn" id="nc_clear" aria-label="Clear input and output">CLEAR</button>' +
+      '<button type="button" class="cbtn" id="nc_swap" aria-label="Swap between Preeti to Unicode and Unicode to Preeti">SWAP</button>' +
+      '<label class="chk nc-keep" id="nc_keepw"><input type="checkbox" id="nc_keep" checked> Keep common English words</label><span class="nc-msg" id="nc_msg" role="status" aria-live="polite"></span></div>' +
+      '<div class="cwarn" id="nc_warn" role="status" aria-live="polite" hidden></div><p class="cnote nc-note" id="nc_note"></p></div>' +
+      '<div class="cc nc-sp"><h4 class="csec">Special characters</h4><div class="chips" id="nc_sp" role="group" aria-label="Special characters">' +
+      SPECIAL.map(function (c) { return '<button type="button" class="chip" lang="ne" data-ch="' + c + '" title="Insert at the cursor">' + c + '</button>'; }).join('') + '</div>' +
+      '<p class="cmu">Click a character to insert it at the cursor in the input box (in Preeti mode it is inserted as its Preeti keys).</p></div>' +
+      '<details class="cdet"><summary>What is Preeti?</summary><p>Preeti is a legacy Nepali font-based typing system. Text typed using the Preeti keyboard layout is stored differently from modern Unicode Nepali: the file holds ordinary English-looking characters and only looks Nepali while the Preeti font is applied. Unicode allows Nepali text to work reliably across modern websites, phones and applications.</p></details>' +
+      '<details class="cdet"><summary>How to use</summary><ol class="cnotes"><li>Select the conversion type.</li><li>Paste or type your text.</li><li>The result appears automatically.</li><li>Click Copy.</li><li>Paste the result wherever required.</li></ol></details>' +
+      '<p class="cdisc">Conversion is performed locally in your browser. For official, legal, financial or published documents, please review the converted text before use.</p>';
+    var q = function (id) { return el.querySelector('#' + id); }, ta = q('nc_in'), out = q('nc_out');
+    function say(t) { var m = q('nc_msg'); m.textContent = t; clearTimeout(msgTimer); if (t) msgTimer = setTimeout(function () { m.textContent = ''; }, 1800); }
+    function cnt(id, s) { var c = NC.count(s); q(id).textContent = 'Characters: ' + c.chars.toLocaleString('en-US') + '  ·  Words: ' + c.words.toLocaleString('en-US'); }
+    function warn(t) { var w = q('nc_warn'); w.textContent = t || ''; w.hidden = !t; }
+    function convert(s) {
+      if (mode === 'p2u') { warn(NC.hasDevanagari(s) ? 'This appears to contain Unicode Nepali text. Please check that your source text is Preeti encoded.' : ''); return NC.preetiToUnicode(s); }
+      if (mode === 'u2p') { var r = NC.unicodeToPreeti(s); warn(r.unsupported.length ? 'Some characters may not have an exact Preeti equivalent (' + r.unsupported.join(' ') + '). They were left unchanged.' : ''); return r.text; }
+      warn(''); return NC.romanToUnicode(s, { keepEnglish: q('nc_keep').checked });
+    }
+    function update() {
+      var s = ta.value; inputs[mode] = s;
+      lastOut = s ? convert(s) : ''; if (!s) warn('');
+      out.value = lastOut; cnt('nc_ci', s); cnt('nc_co', lastOut);
+    }
+    function schedule() { clearTimeout(timer); if (ta.value.length > 30000) timer = setTimeout(update, 150); else update(); }
+    function applyMode() {
+      var M = MODES[mode];
+      el.querySelectorAll('[data-m]').forEach(function (b) { var on = b.dataset.m === mode; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
+      q('nc_inl').textContent = M.inL; q('nc_outl').textContent = M.outL; ta.placeholder = M.ph; out.placeholder = 'Result appears here';
+      ta.className = 'nc-ta ' + M.inF; out.className = 'nc-ta ' + M.outF; out.lang = M.outLang; ta.lang = mode === 'u2p' ? 'ne' : 'en';
+      q('nc_swap').hidden = mode === 'r2u'; q('nc_keepw').hidden = mode !== 'r2u'; q('nc_note').textContent = M.note;
+      ta.value = inputs[mode]; update();
+    }
+    function setMode(m, text) { if (!MODES[m]) return; inputs[mode] = ta.value; mode = m; if (text != null) inputs[m] = text; applyMode(); }
+    function copy() {
+      var text = out.value, done = function () { say(text ? 'Copied!' : 'Nothing to copy'); };
+      if (!text) { done(); return; }
+      function fb() { out.focus(); out.select(); try { document.execCommand('copy'); done(); } catch (e) { say('Press Ctrl+C to copy'); } }
+      if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done, fb); else fb();
+    }
+    function insertSpecial(ch) {
+      var txt = ch;
+      if (mode === 'p2u') { var r = NC.unicodeToPreeti(ch); if (r.unsupported.length) { say('No Preeti equivalent'); return; } txt = r.text; }
+      var s = ta.selectionStart == null ? ta.value.length : ta.selectionStart, e2 = ta.selectionEnd == null ? s : ta.selectionEnd;
+      ta.focus(); ta.setRangeText(txt, s, e2, 'end'); update();
+    }
+    el.addEventListener('input', function (e) { if (e.target === ta) schedule(); });
+    el.addEventListener('change', function (e) { if (e.target.id === 'nc_keep') update(); });
+    el.addEventListener('keydown', function (e) { if (e.target === ta && e.ctrlKey && e.key === 'Enter') { e.preventDefault(); clearTimeout(timer); update(); say('Converted'); } });
+    el.addEventListener('mousedown', function (e) { if (e.target.closest && e.target.closest('#nc_sp button')) e.preventDefault(); });   // keep the caret in the input box
+    el.addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.m) { if (b.dataset.m !== mode) setMode(b.dataset.m); }
+      else if (b.dataset.ch) insertSpecial(b.dataset.ch);
+      else if (b.id === 'nc_copy') copy();
+      else if (b.id === 'nc_clear') { inputs[mode] = ''; ta.value = ''; update(); say(''); ta.focus(); }
+      else if (b.id === 'nc_swap') { var next = mode === 'p2u' ? 'u2p' : 'p2u'; setMode(next, out.value); say('Swapped'); }
+    });
+    applyMode();
+  } });
+
 /* =====================================================================================
    TRADING & COSTS, CORPORATE ACTIONS, INVESTMENT & VALUATION calculators (v1.5)
    ===================================================================================== */
@@ -4121,11 +4511,11 @@ var GROUPS = [
   { id: 'val', name: 'Investment & Valuation', blurb: 'Intrinsic value, P/E, P/B, DCF and margin of safety' },
   { id: 'growth', name: 'Growth & Loans', blurb: 'SIP, CAGR and EMI' },
   { id: 'dates', name: 'Date Converter', blurb: 'BS \u21C4 AD dates and exact age' },
-  { id: 'conv', name: 'Converter Tools', blurb: 'Numbers to words and unit conversion' }
+  { id: 'conv', name: 'Converter Tools', blurb: 'Numbers to words, unit conversion and Nepali text (Preeti, Unicode, Roman)' }
 ];
 /* order inside each group (a new calculator without an entry here goes to the end of its group) */
 var ORDER = ['buy', 'sell', 'averaging', 'margin', 'pl', 'breakeven', 'target', 'possize', 'rr', 'bonusshares', 'rightshares', 'combined', 'drip', 'bonus', 'right', 'dividend', 'pivot',
-  'graham', 'pe', 'pb', 'divyield', 'ddm', 'dcf', 'intrinsic', 'targetprice', 'mos', 'ey', 'sip', 'cagr', 'emi', 'date', 'age', 'numwords', 'units'];
+  'graham', 'pe', 'pb', 'divyield', 'ddm', 'dcf', 'intrinsic', 'targetprice', 'mos', 'ey', 'sip', 'cagr', 'emi', 'date', 'age', 'numwords', 'units', 'nepali-converter'];
 CALCS.sort(function (a, b) { var i = ORDER.indexOf(a.id), j = ORDER.indexOf(b.id); return (i < 0 ? 99 : i) - (j < 0 ? 99 : j); });
 var byId = {}; CALCS.forEach(function (c) { byId[c.id] = c; });
 var cur = null, lastIn = {};   // lastIn: last calculator opened in each group
@@ -4211,8 +4601,14 @@ panel.addEventListener('click', function (e) { var b = e.target.closest('button'
 
 window.NNH_CALC = { show: function () { if (!cur) open('home', true); }, open: open, list: function () { return CALCS.map(function (c) { return c.id; }); } };
 
-var m = /^#calc(?:\/([a-z]+))?$/.exec(location.hash || '');
+var m = /^#calc(?:\/([a-z-]+))?$/.exec(location.hash || '');
 if (m) { D.go('calc'); open(m[1] || 'home', true); }
+/* typed or pasted #calc/... links, and back/forward between them */
+window.addEventListener('hashchange', function () {
+  var h = /^#calc(?:\/([a-z-]+))?$/.exec(location.hash || ''); if (!h) return;
+  var id = h[1] || 'home'; if (id !== 'home' && !byId[id]) id = 'home';
+  D.go('calc'); if (id !== cur) open(id, true);
+});
 })();
 
 </script>
