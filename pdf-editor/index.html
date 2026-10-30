@@ -80,9 +80,6 @@
 
 <!-- ============ LANDING (no PDF open) ============ -->
 <main id="landing" class="landing" aria-labelledby="landing-title">
-  <div class="landing-top">
-    <a class="back-link" href="../" id="landing-back"><svg class="ic"><use href="#i-arrow-left"/></svg> Back to website</a>
-  </div>
   <div id="dropzone" class="dropzone" tabindex="-1">
     <div class="brand-mark" aria-hidden="true">
       <svg viewBox="0 0 32 32" width="44" height="44"><rect width="32" height="32" rx="8" fill="currentColor"/><path d="M9 8h9l5 5v11H9z" fill="none" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/><path d="M18 8v5h5M12.5 19h7M12.5 22h4" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>
@@ -105,10 +102,10 @@
 <!-- ============ EDITOR ============ -->
 <div id="app" class="app" hidden>
   <header class="topbar" id="topbar" role="toolbar" aria-label="Main toolbar">
-    <a class="logo" href="../" title="Back to website" aria-label="Back to website">
+    <span class="logo">
       <svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#fff"/><path d="M9 8h9l5 5v11H9z" fill="none" stroke="#14233f" stroke-width="2" stroke-linejoin="round"/><path d="M18 8v5h5M12.5 19h7M12.5 22h4" fill="none" stroke="#14233f" stroke-width="2" stroke-linecap="round"/></svg>
       <span class="logo-text">PDF Editor</span>
-    </a>
+    </span>
     <span class="sep"></span>
     <button class="tb-btn" id="btn-toggle-left" type="button" title="Show/hide pages" aria-label="Toggle page thumbnails"><svg class="ic"><use href="#i-panel-left"/></svg></button>
     <button class="tb-btn" id="btn-open" type="button" title="Open PDF (Ctrl+O)"><svg class="ic"><use href="#i-folder"/></svg><span class="lbl">Open</span></button>
