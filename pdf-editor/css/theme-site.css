@@ -1,0 +1,43 @@
+/* PDF Editor: site colour theme (olive green, same as the NewsPortal). Loaded after editor.css; remove this file and its <link> to get the old blue look. */
+:root{--brand:#3d4922;--brand-2:#4d5b2a;--accent:#4d5b2a;--accent-soft:#eef1dc;--bg:#f1f3e3;--panel:#ffffff;--line:rgba(77,91,42,.22);--text:#14170b;--muted:#4a5230;--danger:#c0392b;--ok:#3f7d1f;--soft:#f4f6e8;--soft2:#e6ebcf}
+:root[data-theme=dark]{--brand:#0f1207;--brand-2:#a3b565;--accent:#a3b565;--accent-soft:#2c3318;--bg:#14170b;--panel:#1f2412;--line:rgba(238,241,220,.16);--text:#f4f6e8;--muted:#cfd7b3;--danger:#fb7185;--ok:#4ade80;--soft:#232914;--soft2:#2c3318}
+.btn{background:var(--panel);color:var(--text)}
+.btn:hover{background:var(--soft)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 2px 6px rgba(61,73,34,.28)}
+.btn-primary:hover{background:var(--brand)}
+:root[data-theme=dark] .btn-primary{color:#14170b}
+:root[data-theme=dark] .btn-primary:hover{background:#b8c97c}
+.landing{background:radial-gradient(1200px 500px at 50% -10%,rgba(163,181,101,.28),transparent 70%),linear-gradient(180deg,var(--soft),var(--bg))}
+.dropzone{background:var(--panel);border:2px dashed rgba(77,91,42,.4);border-radius:20px;box-shadow:0 12px 34px rgba(61,73,34,.12)}
+.dropzone.drag{border-color:var(--accent);background:var(--accent-soft)}
+.brand-mark{color:var(--accent)}
+.landing h1{color:var(--text)}
+.privacy{color:var(--muted)}
+.landing-features li{background:var(--soft);border-color:var(--line);color:var(--text)}
+.topbar{background:var(--brand);color:#eef1dc;border-bottom:3px solid #a3b565}
+:root[data-theme=dark] .topbar{background:#0f1207;border-bottom-color:#a3b565}
+:root[data-theme=dark] .topbar,:root[data-theme=dark] .topbar .tb-btn{color:#eef1dc}
+:root[data-theme=dark] body,:root[data-theme=dark] .app{color:var(--text)}
+:root[data-theme=dark] input,:root[data-theme=dark] select,:root[data-theme=dark] textarea{background:var(--soft);color:var(--text);border-color:var(--line)}
+:root[data-theme=dark] .skip-link{background:var(--panel);color:var(--text)}
+::selection{background:rgba(163,181,101,.45)}
+/* leftover blue/navy parts of the original theme */
+.thumbs{background:var(--soft)}
+.thumb:hover,.mini-btn:hover:not([disabled]),.titem:hover:not([disabled]),.findbar .fb:hover,.tsec > button.thead:hover{background:var(--soft2)}
+.thumb .tnum,.quickbar button{color:var(--muted)}
+.tsec > button.thead,.findbar{background:var(--panel);color:var(--text)}
+.titem{color:var(--text)}
+.titem[disabled]{color:var(--muted);opacity:.55}
+.page-pill{background:rgba(61,73,34,.94);box-shadow:0 6px 18px rgba(20,23,11,.3)}
+.toast{background:var(--brand)}
+.obj:hover:not(.editing){outline-color:rgba(77,91,42,.7)}
+.tx-hit:hover{background:rgba(163,181,101,.3)}
+.crop-rect{outline-color:#a3b565}
+.modal-back{background:rgba(20,23,11,.55)}
+:root[data-theme=dark] .app,:root[data-theme=dark] .left,:root[data-theme=dark] .right,:root[data-theme=dark] aside,:root[data-theme=dark] .modal{background:var(--panel);color:var(--text)}
+:root[data-theme=dark] .mini-btn,:root[data-theme=dark] .thumb{color:var(--text)}
+.props{background:var(--soft)}
+.modal{background:var(--panel);color:var(--text)}
+:root[data-theme=dark] .sidebar,:root[data-theme=dark] .props{color:var(--text)}
+:root[data-theme=dark] .thumb .tcanvas,:root[data-theme=dark] .page{background:#fff}
+.mini-btn{background:var(--panel);color:var(--text);border-color:var(--line)}
