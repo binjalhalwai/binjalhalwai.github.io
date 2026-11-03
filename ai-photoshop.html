@@ -2075,7 +2075,7 @@ input[type=checkbox],input[type=radio]{accent-color:var(--ac);width:18px;height:
 <a class="skip" href="#main">Skip to main content</a>
 <header class="top" role="banner">
  <a class="brand" href="#/" aria-label="PDF Tools home"><span class="logo" aria-hidden="true">BH</span><div><b>PDF <span>TOOLS</span></b><small>Free, private PDF tools. Files never leave your browser.</small></div></a>
- <div class="top-r"><a class="toplink" href="https://binjalhalwai.github.io/">&larr; NewsPortal</a><button id="bTheme" class="ic" type="button" title="Toggle light/dark theme" aria-label="Toggle light and dark theme">&#9680;</button></div>
+ <div class="top-r"><a class="toplink" href="https://binjalhalwai.github.io/" target="_top">&larr; NewsPortal</a><button id="bTheme" class="ic" type="button" title="Toggle light/dark theme" aria-label="Toggle light and dark theme">&#9680;</button></div>
 </header>
 <nav class="vtabs" id="vnav" aria-label="PDF tools"><a href="#/" data-r="home">ALL TOOLS</a><a href="#/organize" data-r="organize">Organize</a><a href="#/merge" data-r="merge">Merge</a><a href="#/split" data-r="split">Split</a><a href="#/rotate" data-r="rotate">Rotate</a><a href="#/crop" data-r="crop">Crop</a><a href="#/compress" data-r="compress">Compress</a><a href="#/repair" data-r="repair">Repair</a><a href="#/jpg-to-pdf" data-r="jpg-to-pdf">JPG to PDF</a><a href="#/pdf-to-jpg" data-r="pdf-to-jpg">PDF to JPG</a><a href="#/word-to-pdf" data-r="word-to-pdf">Word to PDF</a><a href="#/watermark" data-r="watermark">Watermark</a><a href="#/page-numbers" data-r="page-numbers">Page numbers</a><a href="#/edit" data-r="edit">Edit</a><a href="#/protect" data-r="protect">Protect</a><a href="#/unlock" data-r="unlock">Unlock</a></nav>
 <main id="main"></main>
@@ -4660,14 +4660,14 @@ window.__PDF_WORKER_URL=URL.createObjectURL(new Blob(["/**\n * @licstart The fol
  var TITLES={"home": "PDF Tools - Free, private PDF tools | Binjal Halwai", "organize": "Organize PDF pages | PDF Tools", "merge": "Merge PDF files | PDF Tools", "split": "Split PDF | PDF Tools", "rotate": "Rotate PDF pages | PDF Tools", "crop": "Crop PDF | PDF Tools", "compress": "Compress PDF | PDF Tools", "repair": "Repair PDF | PDF Tools", "jpg-to-pdf": "JPG to PDF | PDF Tools", "pdf-to-jpg": "PDF to JPG | PDF Tools", "word-to-pdf": "Word to PDF | PDF Tools", "watermark": "Add watermark to PDF | PDF Tools", "page-numbers": "Add page numbers to PDF | PDF Tools", "edit": "Edit PDF | PDF Tools", "protect": "Protect PDF with a password | PDF Tools", "unlock": "Unlock PDF | PDF Tools"};
  function route(){var r=(typeof window.__PDF_ROUTE==='string'?window.__PDF_ROUTE:(location.hash||'#/')).replace(/^#\/?/,'').replace(/\/$/,'');return TOOLJS[r]?r:'home';}
  /* inside AI Photoshop the tool links ask the parent page to load the chosen tool (works from file:// too) */
- document.addEventListener('click',function(e){ if(location.protocol!=='blob:' || window.parent===window) return; var a=e.target.closest&&e.target.closest('a[href^="#/"]'); if(!a) return; e.preventDefault(); parent.postMessage({pdfNav:a.getAttribute('href')},'*'); },true);
+ document.addEventListener('click',function(e){ if(window.parent===window) return; var a=e.target.closest&&e.target.closest('a[href^="#/"]'); if(!a) return; e.preventDefault(); parent.postMessage({pdfNav:a.getAttribute('href')},'*'); },true);
  var cur=route();
  document.getElementById('main').innerHTML=document.getElementById('p-'+cur).innerHTML;
  document.title=TITLES[cur];
  Array.prototype.forEach.call(document.querySelectorAll('#vnav a'),function(a){var on=a.getAttribute('data-r')===cur;a.classList.toggle('on',on);if(on)a.setAttribute('aria-current','page');});
  try{TOOLJS[cur]();}catch(e){console.error(e);}
  /* each page starts clean: reload on navigation so no listeners or files from the previous tool remain */
- window.addEventListener('hashchange',function(){ if(route()!==cur){ if(location.protocol==='blob:' && window.parent!==window) parent.postMessage({pdfNav:location.hash},'*'); else location.reload(); } });
+ window.addEventListener('hashchange',function(){ if(route()!==cur){ if(window.parent!==window) parent.postMessage({pdfNav:location.hash},'*'); else location.reload(); } });
 })();
 <\/script>
 </body></html></script>
