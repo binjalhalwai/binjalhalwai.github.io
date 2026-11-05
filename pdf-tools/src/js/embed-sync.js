@@ -1,0 +1,1 @@
+try{if(window.parent!==window){var d=document.documentElement;d.className='embed';var pd=parent.document.documentElement;var sync=function(){d.setAttribute('data-theme',pd.getAttribute('data-theme')==='dark'?'dark':'light')};sync();new MutationObserver(sync).observe(pd,{attributes:true,attributeFilter:['data-theme']})}}catch(e){}
