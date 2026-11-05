@@ -24,6 +24,11 @@ on:
     - cron: "21 16,20 * * *"
   workflow_dispatch:          # lets you press "Run workflow" yourself
   push:                       # re-publish right after you upload a new screener file
+    # FIX: only branch pushes to main.  Without "branches", creating a TAG (e.g. before-phase1)
+    # also started this workflow, because GitHub ignores "paths" filters for tag pushes.
+    # The github-pages environment only allows main, so the deploy step was rejected.
+    branches:
+      - main
     paths:
       - screener_public.json
       - nepse_news_hub.py
@@ -154,6 +159,8 @@ jobs:
 
   deploy:
     needs: build
+    # Safety net: never try to deploy from a tag or any non-main ref (e.g. a manual run started on a tag).
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10          # a stuck Pages deployment must not block every later run (they share one queue)
     environment:
